@@ -1,0 +1,61 @@
+import path from 'node:path';
+import fs from 'node:fs';
+import Database from 'better-sqlite3';
+import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
+import * as schema from '../db/schema/index.js';
+import { env } from './env.js';
+
+export type AppDatabase = BetterSQLite3Database<typeof schema>;
+
+let sqlite: Database.Database | null = null;
+let dbInstance: AppDatabase | null = null;
+
+function ensureDbDirectory(dbPath: string): void {
+    const dir = path.dirname(dbPath);
+
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
+}
+
+/** Inicializa (uma única vez) a conexão SQLite + ORM. */
+export function initDatabase(): AppDatabase {
+    if (dbInstance) return dbInstance;
+
+    ensureDbDirectory(env.dbPath);
+
+    sqlite = new Database(env.dbPath);
+    sqlite.pragma('journal_mode = WAL');
+    sqlite.pragma('foreign_keys = ON');
+
+    dbInstance = drizzle(sqlite, { schema });
+    return dbInstance;
+}
+
+/** Aplica migrações geradas pelo drizzle-kit. */
+export function runMigrations(): void {
+    const db = initDatabase();
+    const migrationsFolder = path.resolve(process.cwd(), 'src/db/migrations');
+
+    if (!fs.existsSync(migrationsFolder)) {
+        return;
+    }
+
+    migrate(db, { migrationsFolder });
+}
+
+export function getDatabase(): AppDatabase {
+    if (!dbInstance) {
+        return initDatabase();
+    }
+    return dbInstance;
+}
+
+export function closeDatabase(): void {
+    if (sqlite) {
+        sqlite.close();
+        sqlite = null;
+        dbInstance = null;
+    }
+}
