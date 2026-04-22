@@ -49,6 +49,7 @@ export function getDatabase(): AppDatabase {
     if (!dbInstance) {
         return initDatabase();
     }
+
     return dbInstance;
 }
 

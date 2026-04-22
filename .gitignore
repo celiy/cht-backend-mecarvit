@@ -6,6 +6,8 @@
 .env.*.local
 
 /data/*.sqlite
+/data/*.sqlite-shm
+/data/*.sqlite-wal
 /data/*.sqlite-journal
 /data/*.db
 

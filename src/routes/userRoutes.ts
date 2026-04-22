@@ -8,4 +8,6 @@ userRouter.route("/")
     .post(userController.createUser);
 
 userRouter.route("/:id")
-    .get(userController.getUserById);
+    .get(userController.getUserById)
+    .put(userController.updateUserById)
+    .delete(userController.deleteUserById);
