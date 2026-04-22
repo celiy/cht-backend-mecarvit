@@ -1,12 +1,12 @@
-import { closeDatabase, runMigrations } from '../config/database.js';
+import { closeDatabase, runMigrations } from "../config/database.js";
 
-console.log('Aplicando migrações...');
+console.log("Applying migrations...");
 
 try {
     runMigrations();
-    console.log('Migrações aplicadas com sucesso.');
+    console.log("Migrations applied successfully.");
 } catch (err) {
-    console.error('Falha ao aplicar migrações:', err);
+    console.error("Failed to apply migrations:", err);
     process.exitCode = 1;
 } finally {
     closeDatabase();

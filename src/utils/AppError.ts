@@ -1,9 +1,9 @@
-import type { ApiErrorFields } from '@shared/errors/ApiError';
+import type { ApiErrorFields } from "@shared/errors/ApiError";
 
 /**
- * Erro operacional da aplicação. Inclui `statusCode` e opcionalmente `fields`
- * para erros de validação por campo, seguindo o contrato ApiErrorResponse
- * compartilhado com o front-end.
+ * Operational application error. Includes `statusCode` and optional `fields`
+ * for field-level validation errors, following the shared ApiErrorResponse
+ * contract used by the front-end.
  */
 export class AppError extends Error {
     readonly statusCode: number;

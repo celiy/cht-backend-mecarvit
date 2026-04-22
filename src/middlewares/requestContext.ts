@@ -1,12 +1,12 @@
-import type { RequestHandler } from 'express';
+import type { RequestHandler } from "express";
 
-declare module 'express-serve-static-core' {
+declare module "express-serve-static-core" {
     interface Request {
         requestedAt?: string;
     }
 }
 
-/** Anexa o timestamp ISO da requisição em `req.requestedAt`. */
+/** Attaches the request ISO timestamp into `req.requestedAt`. */
 export const requestContext: RequestHandler = (req, _res, next) => {
     req.requestedAt = new Date().toISOString();
     next();

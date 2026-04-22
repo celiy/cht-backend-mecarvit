@@ -1,4 +1,4 @@
-import type { NextFunction, Request, RequestHandler, Response } from 'express';
+import type { NextFunction, Request, RequestHandler, Response } from "express";
 
 type AsyncRequestHandler = (
     req: Request,
@@ -7,8 +7,9 @@ type AsyncRequestHandler = (
 ) => Promise<unknown>;
 
 /**
- * Envolve um handler assíncrono para que rejeições sejam delegadas ao
- * `globalErrorHandler` via `next(err)`, evitando try/catch nos controllers.
+ * Wraps an async request handler so rejections are forwarded
+ * to `globalErrorHandler` through `next(err)`, avoiding repeated try/catch
+ * blocks in controllers.
  */
 export function catchAsync(fn: AsyncRequestHandler): RequestHandler {
     return (req, res, next) => {

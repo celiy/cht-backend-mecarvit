@@ -11,18 +11,18 @@ import {
     sql,
     type AnyColumn,
     type SQL,
-} from 'drizzle-orm';
-import { SQLiteTable, getTableConfig } from 'drizzle-orm/sqlite-core';
-import type { AppDatabase } from '../config/database.js';
-import { AppError } from './AppError.js';
+} from "drizzle-orm";
+import { SQLiteTable, getTableConfig } from "drizzle-orm/sqlite-core";
+import type { AppDatabase } from "../config/database.js";
+import { AppError } from "./AppError.js";
 
 type QueryValue = string | string[] | undefined;
 type QueryString = Record<string, unknown>;
 
-const OPERATORS = ['gte', 'gt', 'lte', 'lt'] as const;
+const OPERATORS = ["gte", "gt", "lte", "lt"] as const;
 type Operator = typeof OPERATORS[number];
 
-const RESERVED = new Set(['sort', 'page', 'limit', 'fields']);
+const RESERVED = new Set(["sort", "page", "limit", "fields"]);
 
 function isOperator(value: string): value is Operator {
     return (OPERATORS as readonly string[]).includes(value);
@@ -43,7 +43,7 @@ function coerce(raw: string): string | number | Date {
 }
 
 function toStringValue(value: unknown): string | undefined {
-    if (typeof value === 'string') return value;
+    if (typeof value === "string") return value;
     if (Array.isArray(value)) return value[value.length - 1] as string;
     return undefined;
 }
@@ -59,16 +59,16 @@ interface PaginateInfo {
 }
 
 /**
- * Constrói uma query Drizzle a partir dos parâmetros de URL, seguindo a mesma
- * API pública do ApiFeatures antigo (Mongo):
+ * Builds a Drizzle query from URL parameters while keeping the same
+ * public API as the previous Mongo-based ApiFeatures implementation:
  *
- *   ?campo=valor                       → LIKE case-insensitive (strings) ou eq (números/datas)
- *   ?campo[gte|gt|lte|lt]=valor        → operadores de comparação
- *   ?sort=campo,-outroCampo            → ORDER BY campo ASC, outroCampo DESC
- *   ?fields=a,b,c                      → projeção de colunas
- *   ?page=1&limit=10                   → paginação (defaults 1 / 10)
+ *   ?field=value                       -> case-insensitive LIKE for strings or eq for numbers/dates
+ *   ?field[gte|gt|lte|lt]=value        -> comparison operators
+ *   ?sort=field,-otherField            -> ORDER BY field ASC, otherField DESC
+ *   ?fields=a,b,c                      -> column projection
+ *   ?page=1&limit=10                   -> pagination with defaults 1 / 10
  *
- * Uso típico:
+ * Typical usage:
  *
  *   const features = new ApiFeatures(db, users, req.query)
  *     .filter().sort().limitFields().paginate();
@@ -111,7 +111,7 @@ export class ApiFeatures<TTable extends SQLiteTable> {
             const column = getColumn(this.columns, key);
             if (!column) continue;
 
-            if (rawValue !== null && typeof rawValue === 'object' && !Array.isArray(rawValue)) {
+            if (rawValue !== null && typeof rawValue === "object" && !Array.isArray(rawValue)) {
                 for (const [op, opValue] of Object.entries(rawValue as Record<string, unknown>)) {
                     if (!isOperator(op)) continue;
                     const raw = toStringValue(opValue);
@@ -127,7 +127,7 @@ export class ApiFeatures<TTable extends SQLiteTable> {
             if (raw === undefined) continue;
 
             const coerced = coerce(raw);
-            if (typeof coerced === 'string') {
+            if (typeof coerced === "string") {
                 this.whereConds.push(
                     like(sql`lower(${column})`, `%${coerced.toLowerCase()}%`),
                 );
@@ -143,13 +143,13 @@ export class ApiFeatures<TTable extends SQLiteTable> {
 
     private compareOp(column: AnyColumn, op: Operator, value: string | number | Date): SQL {
         switch (op) {
-            case 'gte':
+            case "gte":
                 return gte(column, value);
-            case 'gt':
+            case "gt":
                 return gt(column, value);
-            case 'lte':
+            case "lte":
                 return lte(column, value);
-            case 'lt':
+            case "lt":
                 return lt(column, value);
         }
     }
@@ -158,8 +158,8 @@ export class ApiFeatures<TTable extends SQLiteTable> {
         const sortRaw = toStringValue(this.queryString.sort as QueryValue);
         if (!sortRaw) return this;
 
-        for (const token of sortRaw.split(',').map(s => s.trim()).filter(Boolean)) {
-            const descending = token.startsWith('-');
+        for (const token of sortRaw.split(",").map(s => s.trim()).filter(Boolean)) {
+            const descending = token.startsWith("-");
             const fieldName = descending ? token.slice(1) : token;
             const column = getColumn(this.columns, fieldName);
             if (!column) continue;
@@ -175,7 +175,7 @@ export class ApiFeatures<TTable extends SQLiteTable> {
         if (!fieldsRaw) return this;
 
         const picked: Record<string, AnyColumn> = {};
-        for (const name of fieldsRaw.split(',').map(s => s.trim()).filter(Boolean)) {
+        for (const name of fieldsRaw.split(",").map(s => s.trim()).filter(Boolean)) {
             const column = getColumn(this.columns, name);
             if (column) picked[name] = column;
         }
@@ -191,8 +191,8 @@ export class ApiFeatures<TTable extends SQLiteTable> {
         const pageRaw = toStringValue(this.queryString.page as QueryValue);
         const limitRaw = toStringValue(this.queryString.limit as QueryValue);
 
-        const page = Math.max(1, parseInt(pageRaw ?? '1', 10) || 1);
-        const limit = Math.max(1, parseInt(limitRaw ?? '10', 10) || 10);
+        const page = Math.max(1, parseInt(pageRaw ?? "1", 10) || 1);
+        const limit = Math.max(1, parseInt(limitRaw ?? "10", 10) || 10);
         const offset = (page - 1) * limit;
 
         this.paginateInfo = { page, limit, offset };
@@ -203,7 +203,7 @@ export class ApiFeatures<TTable extends SQLiteTable> {
         return this.paginateInfo ?? { page: 1, limit: 10, offset: 0 };
     }
 
-    /** Roda COUNT(*) com os mesmos filtros aplicados. */
+    /** Runs COUNT(*) with the same applied filters. */
     async count(): Promise<number> {
         const base = this.db
             .select({ count: sql<number>`count(*)` })
@@ -218,12 +218,12 @@ export class ApiFeatures<TTable extends SQLiteTable> {
         return Number(first?.count ?? 0);
     }
 
-    /** Executa a query final com todos os modificadores aplicados. */
+    /** Executes the final query with all applied modifiers. */
     async exec(): Promise<Record<string, unknown>[]> {
         if (this.paginateInfo && this.queryString.page !== undefined) {
             const total = await this.count();
             if (this.paginateInfo.offset >= total && total > 0) {
-                throw new AppError('Esta página não existe', 404);
+                throw new AppError("Esta página não existe", 404);
             }
         }
 

@@ -1,19 +1,19 @@
-import type { Request, Response } from 'express';
-import type { CreateUserDTO } from '@shared/entities/User';
-import { validateCreateUser } from '@shared/validators/user';
-import { catchAsync } from '../utils/catchAsync.js';
-import { AppError } from '../utils/AppError.js';
-import { ApiFeatures } from '../utils/ApiFeatures.js';
-import { getDatabase } from '../config/database.js';
-import { users } from '../db/schema/users.js';
-import * as userService from '../services/userService.js';
+import type { Request, Response } from "express";
+import type { CreateUserDTO } from "@shared/entities/User";
+import { validateCreateUser } from "@shared/validators/user";
+import { catchAsync } from "../utils/catchAsync.js";
+import { AppError } from "../utils/AppError.js";
+import { ApiFeatures } from "../utils/ApiFeatures.js";
+import { getDatabase } from "../config/database.js";
+import { users } from "../db/schema/users.js";
+import * as userService from "../services/userService.js";
 
 export const createUser = catchAsync(async (req: Request, res: Response) => {
     const body = (req.body ?? {}) as Partial<CreateUserDTO>;
 
     const validationErrors = validateCreateUser(body);
     if (validationErrors) {
-        throw new AppError('Validação falhou', 400, validationErrors);
+        throw new AppError("Validação falhou", 400, validationErrors);
     }
 
     const created = await userService.createUser({
@@ -54,13 +54,13 @@ export const getUserById = catchAsync(async (req: Request, res: Response) => {
     const id = Number(req.params.id);
 
     if (!Number.isInteger(id) || id <= 0) {
-        throw new AppError('ID inválido', 400, { id: 'ID deve ser um inteiro positivo' });
+        throw new AppError("ID inválido", 400, { id: "ID deve ser um inteiro positivo" });
     }
 
     const user = await userService.findUserById(id);
 
     if (!user) {
-        throw new AppError('Usuário não encontrado', 404);
+        throw new AppError("Usuário não encontrado", 404);
     }
 
     res.status(200).json({ data: user });
