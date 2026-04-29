@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import type { CreateUserDTO, UpdateUserDTO } from "@shared/entities/User";
+import type { CreateUserDTO, UpdateUserDTO } from "../entities/User.js";
 import { validateCreateUser, validateUpdateUser } from "@shared/validators/user";
 import { catchAsync } from "../utils/catchAsync.js";
 import { AppError } from "../utils/AppError.js";

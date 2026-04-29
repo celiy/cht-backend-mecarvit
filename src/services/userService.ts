@@ -1,6 +1,6 @@
 import bcrypt from "bcrypt";
 import { eq } from "drizzle-orm";
-import type { CreateUserDTO, PublicUser, UpdateUserDTO } from "@shared/entities/User";
+import type { CreateUserDTO, PublicUser, UpdateUserDTO } from "../entities/User.js";
 import { getDatabase } from "../config/database.js";
 import { users, type UserRow } from "../db/schema/users.js";
 

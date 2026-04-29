@@ -11,4 +11,4 @@ O `cht-backend-mecarvit` é a API do cliente, construída em Node.js com Express
 - Expõe endpoints HTTP para regras de negócio do cliente.
 - Gerencia persistência de dados (SQLite + Drizzle ORM).
 - Aplica validações, middlewares de segurança e tratamento padronizado de erros.
-- Compartilha contratos e tipos com outros repos via `cht-shared`.
+- Consome do `cht-shared` apenas contratos e utilitários realmente compartilhados.

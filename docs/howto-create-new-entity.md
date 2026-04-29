@@ -2,14 +2,15 @@
 
 This guide explains the full flow to add a new entity in this backend.
 
-It covers shared types/validators, database schema/migrations, service/controller/route layers, and verification steps.
+It covers backend entity types, shared validators/contracts, database schema/migrations, service/controller/route layers, and verification steps.
 
 ## Architecture recap
 
 - HTTP entrypoint is `src/app.ts`.
 - API routes are mounted under `/api` in `src/routes/index.ts`.
 - Database access is done through Drizzle + SQLite in `src/config/database.ts`.
-- Shared contracts are imported from `@shared/*` (`../cht-shared/src/*` via `tsconfig.json` paths).
+- Shared validators/contracts are imported from `@shared/*` (`../cht-shared/src/*` via `tsconfig.json` paths).
+- Backend domain entities live locally in `src/entities/*`.
 - Errors must use `AppError` and are formatted by `globalErrorHandler` into `ApiErrorResponse`.
 
 ## Naming conventions
@@ -24,13 +25,13 @@ Use the same naming pattern already used by `User`:
   - `src/controllers/customerController.ts`
   - `src/routes/customerRoutes.ts`
 
-## Step 1: Add shared contracts in `cht-shared`
+## Step 1: Add backend entity contracts in `src/entities`
 
-Create or update shared files first. Backend and frontend must consume the same contracts.
+Create entity types in the backend first. Domain entities now belong to this repository.
 
-1. Add entity types in `cht-shared/src/entities/Customer.ts`.
-2. Add or update validators in `cht-shared/src/validators/customer.ts`.
-3. Reuse `cht-shared/src/errors/ApiError.ts` for response shape.
+1. Add entity types in `src/entities/Customer.ts`.
+2. Reuse these types in services/controllers as needed.
+3. Keep only truly shared contracts in `cht-shared`.
 
 Example:
 
@@ -50,9 +51,15 @@ export interface CreateCustomerDTO {
 }
 ```
 
+## Step 2: Add/update shared validator (if needed)
+
+If frontend and backend should share validation behavior, add/update:
+
+- `cht-shared/src/validators/customer.ts`
+
 Validation functions should return field-level errors compatible with `ApiErrorFields`.
 
-## Step 2: Create Drizzle schema
+## Step 3: Create Drizzle schema
 
 Create `src/db/schema/customers.ts`.
 
@@ -81,7 +88,7 @@ export * from "./users";
 export * from "./customers";
 ```
 
-## Step 3: Generate and apply migration
+## Step 4: Generate and apply migration
 
 Run from `cht-backend-mecarvit`:
 
@@ -92,7 +99,7 @@ npm run db:migrate
 
 This generates SQL files in `src/db/migrations/` and applies them to `DB_PATH`.
 
-## Step 4: Implement service layer
+## Step 5: Implement service layer
 
 Create `src/services/customerService.ts`.
 
@@ -111,14 +118,14 @@ Typical functions:
 - `updateCustomer(id, dto)`
 - `deleteCustomer(id)`
 
-## Step 5: Implement controller layer
+## Step 6: Implement controller layer
 
 Create `src/controllers/customerController.ts`.
 
 Rules:
 
 - Wrap async handlers with `catchAsync`.
-- Validate request payload with `@shared/validators/*`.
+- Validate request payload with `@shared/validators/*` (or local validator when it is backend-only behavior).
 - Throw `new AppError(message, statusCode, fields?)` for expected failures.
 - Keep controllers thin and delegate business logic to service.
 
@@ -138,7 +145,7 @@ const features = new ApiFeatures(db, customers, req.query as Record<string, unkn
     .paginate();
 ```
 
-## Step 6: Add route file
+## Step 7: Add route file
 
 Create `src/routes/customerRoutes.ts`.
 
@@ -158,7 +165,7 @@ customerRouter.route("/:id")
     .get(customerController.getCustomerById);
 ```
 
-## Step 7: Mount route in API root
+## Step 8: Mount route in API root
 
 Edit `src/routes/index.ts`:
 
@@ -170,7 +177,7 @@ apiRouter.use("/customers", customerRouter);
 
 This exposes endpoints under `/api/customers`.
 
-## Step 8: Error handling checklist
+## Step 9: Error handling checklist
 
 For every new entity, confirm:
 
@@ -179,7 +186,7 @@ For every new entity, confirm:
 - Missing records return `404`.
 - Unknown errors flow to `globalErrorHandler` and keep `ApiErrorResponse` shape.
 
-## Step 9: Security and middleware expectations
+## Step 10: Security and middleware expectations
 
 You do not need to manually call sanitize/cors/helmet for each route.
 
@@ -193,7 +200,7 @@ They are already configured globally in `src/app.ts`:
 - `requestContext`
 - `sanitize`
 
-## Step 10: Verification checklist
+## Step 11: Verification checklist
 
 After implementation:
 
@@ -229,5 +236,5 @@ npm run dev
 - Forgetting to export the new schema in `src/db/schema/index.ts`.
 - Returning private fields from service/controller.
 - Throwing plain `Error` for expected API failures instead of `AppError`.
-- Duplicating validation logic in backend while ignoring shared validators.
+- Importing entity types from `@shared/entities/*` instead of local `src/entities/*`.
 - Forgetting to mount route in `src/routes/index.ts`.
