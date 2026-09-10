@@ -26,6 +26,7 @@ export const env = {
     host: process.env.HOST ?? "127.0.0.1",
     port: parsePort(process.env.PORT, 8000),
     dbPath: process.env.DB_PATH ?? "./data/mecarvit.sqlite",
+    empresasDir: process.env.EMPRESAS_DIR ?? "./data/empresas",
     jwt: {
         secret: required("JWT_SECRET", "change-me-please"),
         expiresIn: process.env.JWT_EXPIRES_IN ?? "7d",

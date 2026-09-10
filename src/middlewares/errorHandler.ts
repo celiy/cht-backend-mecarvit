@@ -13,16 +13,39 @@ function isSqliteError(err: unknown): err is SqliteError {
 
 /**
  * Maps common SQLite/better-sqlite3 errors to the `fields` response format.
- * Example: UNIQUE on `users.email` -> { email: "Email já cadastrado" }
+ * Example: UNIQUE on `usuario.email` -> { email: "Email já cadastrado" }
  */
+const UNIQUE_FIELD_MESSAGES: Record<string, { field: string; message: string }> = {
+    email: { field: "email", message: "Email já cadastrado" },
+    cpf: { field: "cpf", message: "CPF já cadastrado" },
+    documento: { field: "documento", message: "Documento já cadastrado" },
+    chassi: { field: "chassi", message: "Chassi já cadastrado" },
+    nome: { field: "nome", message: "Nome já cadastrado" }
+};
+
+function snakeToCamel(value: string): string {
+    return value.replace(/_([a-z])/g, (_match, letter: string) => letter.toUpperCase());
+}
+
 function mapSqliteError(err: SqliteError): AppError | null {
-    if (err.code === "SQLITE_CONSTRAINT_UNIQUE" || err.code === "SQLITE_CONSTRAINT") {
-        const match = err.message.match(/UNIQUE constraint failed:\s*([^.]+)\.([^\s]+)/i);
+    if (
+        err.code === "SQLITE_CONSTRAINT_UNIQUE"
+        || err.code === "SQLITE_CONSTRAINT_PRIMARYKEY"
+        || err.code === "SQLITE_CONSTRAINT"
+    ) {
+        const match = err.message.match(/(?:UNIQUE|PRIMARY KEY) constraint failed:\s*([^.]+)\.([^\s]+)/i);
         const fields: ApiErrorFields = {};
 
         if (match) {
-            const column = match[2].replace(/`/g, "").trim();
-            fields[column] = `${column} já cadastrado`;
+            const column = (match[2] ?? "").replace(/`/g, "").trim();
+            const mapped = UNIQUE_FIELD_MESSAGES[column] ?? UNIQUE_FIELD_MESSAGES[snakeToCamel(column)];
+
+            if (mapped) {
+                fields[mapped.field] = mapped.message;
+            } else {
+                const field = snakeToCamel(column) || column;
+                fields[field] = `${field} já cadastrado`;
+            }
         }
 
         return new AppError(

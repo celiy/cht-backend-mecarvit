@@ -49,7 +49,11 @@ function toStringValue(value: unknown): string | undefined {
 }
 
 function getColumn(columns: Record<string, AnyColumn>, field: string): AnyColumn | null {
-    return columns[field] ?? null;
+    return columns[field] ?? columns[camelToSnake(field)] ?? null;
+}
+
+function camelToSnake(value: string): string {
+    return value.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
 }
 
 interface PaginateInfo {
@@ -96,6 +100,13 @@ export class ApiFeatures<TTable extends SQLiteTable> {
         for (const col of cfg.columns) {
             cols[col.name] = col as unknown as AnyColumn;
         }
+
+        for (const [key, value] of Object.entries(table as unknown as Record<string, unknown>)) {
+            if (value && typeof value === "object" && "name" in (value as object)) {
+                cols[key] = value as AnyColumn;
+            }
+        }
+
         this.columns = cols;
 
         this.queryString = queryString ?? {};
@@ -127,7 +138,9 @@ export class ApiFeatures<TTable extends SQLiteTable> {
             if (raw === undefined) continue;
 
             const coerced = coerce(raw);
-            if (typeof coerced === "string") {
+            if (raw === "true" || raw === "false") {
+                this.whereConds.push(eq(column, raw === "true"));
+            } else if (typeof coerced === "string") {
                 this.whereConds.push(
                     like(sql`lower(${column})`, `%${coerced.toLowerCase()}%`),
                 );

@@ -10,6 +10,7 @@
 /data/*.sqlite-wal
 /data/*.sqlite-journal
 /data/*.db
+/data/empresas/
 
 *.log
 .DS_Store

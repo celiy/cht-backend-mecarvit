@@ -2,13 +2,14 @@ import jwt, { type JwtPayload as JsonWebTokenPayload, type Secret, type SignOpti
 import { env } from "../config/env.js";
 
 export interface AuthJwtPayload {
-    sub: number;
+    sub: string;
     email: string;
+    empresaId: number;
 }
 
 export function signToken(payload: AuthJwtPayload): string {
     const options: SignOptions = {
-        expiresIn: env.jwt.expiresIn as SignOptions["expiresIn"],
+        expiresIn: env.jwt.expiresIn as SignOptions["expiresIn"]
     };
 
     return jwt.sign(payload, env.jwt.secret as Secret, options);
@@ -16,13 +17,13 @@ export function signToken(payload: AuthJwtPayload): string {
 
 export function verifyToken(token: string): AuthJwtPayload {
     const decoded = jwt.verify(token, env.jwt.secret as Secret) as JsonWebTokenPayload & AuthJwtPayload;
-
-    const sub = Number(decoded.sub);
+    const sub = String(decoded.sub ?? "");
     const email = String(decoded.email ?? "");
+    const empresaId = Number(decoded.empresaId);
 
-    if (!Number.isInteger(sub) || sub <= 0 || !email) {
+    if (!sub || !email || !Number.isInteger(empresaId) || empresaId <= 0) {
         throw new Error("Token inválido");
     }
 
-    return { sub, email };
+    return { sub, email, empresaId };
 }

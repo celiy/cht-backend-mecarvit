@@ -8,7 +8,10 @@
     "start": "tsx src/server.ts",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx src/db/migrate.ts"
+    "db:migrate": "tsx src/db/migrate.ts",
+    "db:reset": "tsx src/db/reset.ts",
+    "tests": "vitest run",
+    "docs:routes": "tsx src/repl/writeDocs.ts"
   },
   "dependencies": {
     "@types/jsonwebtoken": "^9.0.10",
@@ -34,8 +37,11 @@
     "@types/hpp": "^0.2.6",
     "@types/node": "^24.10.1",
     "@types/node-cron": "^3.0.11",
+    "@types/supertest": "^7.2.1",
     "drizzle-kit": "^0.31.10",
+    "supertest": "^7.2.2",
     "tsx": "^4.19.2",
-    "typescript": "~5.9.3"
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.0"
   }
 }

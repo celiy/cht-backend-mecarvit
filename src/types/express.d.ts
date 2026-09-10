@@ -1,9 +1,12 @@
-import type { PublicUser } from "../entities/User.js";
+import type { PublicUsuario } from "../entities/Usuario.js";
+import type { AppDatabase } from "../config/database.js";
 
 declare global {
     namespace Express {
         interface Request {
-            user?: PublicUser;
+            user?: PublicUsuario;
+            empresaId?: number;
+            db?: AppDatabase;
         }
     }
 }
