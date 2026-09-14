@@ -3,6 +3,7 @@ import { env } from "./config/env.js";
 import { createApp } from "./app.js";
 import { closeAllCompanies, runMigrations } from "./config/database.js";
 import { startRepl } from "./repl/index.js";
+import { freeListenPort } from "./utils/freeListenPort.js";
 
 process.on("uncaughtException", (err) => {
     console.error("UNCAUGHT EXCEPTION:", err);
@@ -14,6 +15,8 @@ console.log(`Current environment: ${env.nodeEnv}`);
 runMigrations();
 
 const app = createApp();
+
+await freeListenPort(env.port, env.host);
 
 const server: Server = app.listen(env.port, env.host, () => {
     console.log(`Servidor iniciado em http://${env.host}:${env.port}`);

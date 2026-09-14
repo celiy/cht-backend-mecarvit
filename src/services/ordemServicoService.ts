@@ -403,16 +403,16 @@ export async function updateOrdemServico(
 
 export async function deleteOrdemServico(db: AppDatabase, id: number) {
     const current = await getOrdemServico(db, id);
+    const temHistorico =
+        current.itens.length > 0 ||
+        current.pagamentos.length > 0 ||
+        current.regEntradaSaidaId != null ||
+        current.registroEntradaSaida != null;
 
-    if (current.pagamentos.length > 0) {
-        throw new AppError("Ordem de serviço com pagamentos não pode ser excluída", 409);
-    }
-
-    if (current.regEntradaSaidaId) {
-        const resId = current.regEntradaSaidaId;
-
-        await db.update(ordensServico).set({ regEntradaSaidaId: null }).where(eq(ordensServico.id, id));
-        await db.delete(registrosEntradaSaida).where(eq(registrosEntradaSaida.id, resId));
+    if (temHistorico) {
+        throw new AppError("Ordem de serviço com histórico operacional não pode ser excluída", 409, {
+            id: "OS com itens, pagamentos ou registro de entrada/saída permanece no banco"
+        });
     }
 
     await db.delete(ordensServico).where(eq(ordensServico.id, id));

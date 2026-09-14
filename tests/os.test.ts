@@ -208,4 +208,74 @@ describe("ordem de serviço, financeiro e dashboard", () => {
             .set(bearer(ctx.token))
             .expect(409);
     });
+
+    it("não exclui OS com itens, pagamento ou entrada ligada; exclui OS vazia", async () => {
+        const ctx = await seedOperacao();
+
+        const vazia = await request(app)
+            .post("/api/ordem-servico")
+            .set(bearer(ctx.token))
+            .send({
+                clienteDocumento: ctx.documento,
+                veiculoId: ctx.veiculoId
+            })
+            .expect(201);
+
+        await request(app)
+            .delete(`/api/ordem-servico/${vazia.body.data.id}`)
+            .set(bearer(ctx.token))
+            .expect(204);
+
+        const comItens = await request(app)
+            .post("/api/ordem-servico")
+            .set(bearer(ctx.token))
+            .send({
+                clienteDocumento: ctx.documento,
+                veiculoId: ctx.veiculoId,
+                itens: [{ servicoId: ctx.servicoId, quantidade: 1, valorObra: 50 }]
+            })
+            .expect(201);
+
+        await request(app)
+            .delete(`/api/ordem-servico/${comItens.body.data.id}`)
+            .set(bearer(ctx.token))
+            .expect(409);
+
+        await request(app)
+            .get(`/api/ordem-servico/${comItens.body.data.id}`)
+            .set(bearer(ctx.token))
+            .expect(200);
+
+        const comPagamento = await request(app)
+            .post("/api/ordem-servico")
+            .set(bearer(ctx.token))
+            .send({
+                clienteDocumento: ctx.documento,
+                veiculoId: ctx.veiculoId,
+                pagamentos: [{ tipo: "dinheiro", valor: 10 }]
+            })
+            .expect(201);
+
+        await request(app)
+            .delete(`/api/ordem-servico/${comPagamento.body.data.id}`)
+            .set(bearer(ctx.token))
+            .expect(409);
+
+        const concluida = await request(app)
+            .post("/api/ordem-servico")
+            .set(bearer(ctx.token))
+            .send({
+                clienteDocumento: ctx.documento,
+                veiculoId: ctx.veiculoId,
+                statusOsId: 4
+            })
+            .expect(201);
+
+        expect(concluida.body.data.registroEntradaSaida).toBeTruthy();
+
+        await request(app)
+            .delete(`/api/ordem-servico/${concluida.body.data.id}`)
+            .set(bearer(ctx.token))
+            .expect(409);
+    });
 });
