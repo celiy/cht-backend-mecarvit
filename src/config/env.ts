@@ -17,19 +17,22 @@ function parsePort(value: string | undefined, fallback: number): number {
 
 function parseList(value: string | undefined): string[] {
     if (!value) return [];
-    return value.split(",").map(v => v.trim()).filter(Boolean);
+    return value
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean);
 }
 
 export const env = {
     nodeEnv: process.env.NODE_ENV ?? "development",
     isProduction: process.env.NODE_ENV === "production",
     host: process.env.HOST ?? "127.0.0.1",
-    port: parsePort(process.env.PORT, 8000),
+    port: parsePort(process.env.PORT, 3001),
     dbPath: process.env.DB_PATH ?? "./data/mecarvit.sqlite",
     empresasDir: process.env.EMPRESAS_DIR ?? "./data/empresas",
     jwt: {
         secret: required("JWT_SECRET", "change-me-please"),
-        expiresIn: process.env.JWT_EXPIRES_IN ?? "7d",
+        expiresIn: process.env.JWT_EXPIRES_IN ?? "7d"
     },
-    corsOrigins: parseList(process.env.CORS_ORIGINS) ?? [],
+    corsOrigins: parseList(process.env.CORS_ORIGINS) ?? []
 } as const;
