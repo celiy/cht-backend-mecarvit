@@ -21,8 +21,12 @@ O login antigo do frontend (`/api/auth` com `name`/`password`) não é mais vál
 ```bash
 npm run dev
 npm run tests
+npm run db:mock
+npm run db:mock:clear
 npm run db:reset
 ```
+
+Primeiro uso: `docs/getting-started.md`. `npm run db:mock` cria a oficina de demonstração (superadmin `superadmin@mock.mecarvit` / `Mock1234`) com muitos registros marcados `mock = true`. `npm run db:mock:clear` remove só esses registros.
 
 `npm run db:reset` apaga todos os SQLite em `EMPRESAS_DIR` (e o arquivo legado `data/mecarvit.sqlite`). Recusado em `production` salvo `FORCE_RESET=1`. Reinicie o servidor depois.
 

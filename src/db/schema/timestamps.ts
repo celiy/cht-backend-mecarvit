@@ -11,3 +11,9 @@ export function timestamps() {
             .$onUpdateFn(() => new Date())
     };
 }
+
+export function mockFlag() {
+    return {
+        mock: integer("mock", { mode: "boolean" }).notNull().default(false)
+    };
+}

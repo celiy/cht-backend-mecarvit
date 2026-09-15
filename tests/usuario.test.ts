@@ -151,4 +151,28 @@ describe("usuario, cargo e senha inicial", () => {
             .set(bearer(login.body.data.token))
             .expect(403);
     });
+
+    it("lista usuários por CPF em dígitos ou formatado", async () => {
+        const oficina = await cadastrarOficina(app);
+        const token = oficina.token as string;
+        const cargo = await criarCargo(app, token, "5", "Filtro CPF");
+        const func = await criarFuncionario(app, token, cargo.id);
+        const formatted = func.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+
+        const byDigits = await request(app)
+            .get("/api/usuario")
+            .query({ cpf: func.cpf })
+            .set(bearer(token))
+            .expect(200);
+
+        expect(byDigits.body.data.some((row: { cpf: string }) => row.cpf === func.cpf)).toBe(true);
+
+        const byMasked = await request(app)
+            .get("/api/usuario")
+            .query({ cpf: formatted })
+            .set(bearer(token))
+            .expect(200);
+
+        expect(byMasked.body.data.some((row: { cpf: string }) => row.cpf === func.cpf)).toBe(true);
+    });
 });

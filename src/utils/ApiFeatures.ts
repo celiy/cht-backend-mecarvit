@@ -42,6 +42,23 @@ function coerce(raw: string): string | number | Date {
     return raw;
 }
 
+function isTextColumn(column: AnyColumn): boolean {
+    return column.dataType === "string";
+}
+
+/** CPF/CNPJ/phone with punctuation still match digit-only columns. */
+function textFilterNeedle(raw: string): string {
+    const trimmed = raw.trim();
+    const digits = trimmed.replace(/\D/g, "");
+    const withoutSeparators = trimmed.replace(/[.\s()/-]/g, "");
+
+    if (digits.length >= 8 && withoutSeparators === digits) {
+        return digits;
+    }
+
+    return trimmed.toLowerCase();
+}
+
 function toStringValue(value: unknown): string | undefined {
     if (typeof value === "string") return value;
     if (Array.isArray(value)) return value[value.length - 1] as string;
@@ -137,10 +154,20 @@ export class ApiFeatures<TTable extends SQLiteTable> {
             const raw = toStringValue(rawValue as QueryValue);
             if (raw === undefined) continue;
 
-            const coerced = coerce(raw);
             if (raw === "true" || raw === "false") {
                 this.whereConds.push(eq(column, raw === "true"));
-            } else if (typeof coerced === "string") {
+                continue;
+            }
+
+            if (isTextColumn(column)) {
+                this.whereConds.push(
+                    like(sql`lower(${column})`, `%${textFilterNeedle(raw)}%`),
+                );
+                continue;
+            }
+
+            const coerced = coerce(raw);
+            if (typeof coerced === "string") {
                 this.whereConds.push(
                     like(sql`lower(${column})`, `%${coerced.toLowerCase()}%`),
                 );

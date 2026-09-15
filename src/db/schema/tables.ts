@@ -1,17 +1,19 @@
 import { integer, primaryKey, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
-import { timestamps } from "./timestamps.js";
+import { mockFlag, timestamps } from "./timestamps.js";
 
 export const empresas = sqliteTable("empresa", {
     id: integer("id").primaryKey({ autoIncrement: true }),
     nome: text("nome").notNull(),
-    ...timestamps()
+    ...timestamps(),
+    ...mockFlag()
 });
 
 export const cargos = sqliteTable("cargo", {
     id: integer("id").primaryKey({ autoIncrement: true }),
     nome: text("nome").notNull(),
     nivelAcesso: text("nivel_acesso").notNull(),
-    ...timestamps()
+    ...timestamps(),
+    ...mockFlag()
 });
 
 export const usuarios = sqliteTable("usuario", {
@@ -28,7 +30,8 @@ export const usuarios = sqliteTable("usuario", {
     empresaId: integer("empresa_id")
         .notNull()
         .references(() => empresas.id),
-    ...timestamps()
+    ...timestamps(),
+    ...mockFlag()
 });
 
 export const enderecos = sqliteTable("endereco", {
@@ -39,7 +42,8 @@ export const enderecos = sqliteTable("endereco", {
     bairro: text("bairro").notNull(),
     rua: text("rua").notNull(),
     numero: integer("numero").notNull(),
-    complemento: text("complemento").notNull()
+    complemento: text("complemento").notNull(),
+    ...mockFlag()
 });
 
 export const clientes = sqliteTable("cliente", {
@@ -53,7 +57,8 @@ export const clientes = sqliteTable("cliente", {
     usuarioCpf: text("usuario_cpf")
         .notNull()
         .references(() => usuarios.cpf),
-    ...timestamps()
+    ...timestamps(),
+    ...mockFlag()
 });
 
 export const enderecosCliente = sqliteTable(
@@ -64,7 +69,8 @@ export const enderecosCliente = sqliteTable(
             .references(() => clientes.documento, { onDelete: "cascade" }),
         enderecoId: integer("endereco_id")
             .notNull()
-            .references(() => enderecos.id, { onDelete: "cascade" })
+            .references(() => enderecos.id, { onDelete: "cascade" }),
+        ...mockFlag()
     },
     (table) => ({
         pk: primaryKey({ columns: [table.clienteDocumento, table.enderecoId] })
@@ -83,18 +89,21 @@ export const veiculos = sqliteTable("veiculo", {
     clienteDocumento: text("cliente_documento")
         .notNull()
         .references(() => clientes.documento),
-    ...timestamps()
+    ...timestamps(),
+    ...mockFlag()
 });
 
 export const servicos = sqliteTable("servico", {
     id: integer("id").primaryKey({ autoIncrement: true }),
     nome: text("nome").notNull(),
-    ...timestamps()
+    ...timestamps(),
+    ...mockFlag()
 });
 
 export const statusOs = sqliteTable("status_os", {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    nome: text("nome").notNull().unique()
+    nome: text("nome").notNull().unique(),
+    ...mockFlag()
 });
 
 export const registrosEntradaSaida = sqliteTable("reg_entrada_saida", {
@@ -107,7 +116,8 @@ export const registrosEntradaSaida = sqliteTable("reg_entrada_saida", {
     usuarioCpf: text("usuario_cpf")
         .notNull()
         .references(() => usuarios.cpf),
-    ...timestamps()
+    ...timestamps(),
+    ...mockFlag()
 });
 
 export const ordensServico = sqliteTable("ordem_servico", {
@@ -129,7 +139,8 @@ export const ordensServico = sqliteTable("ordem_servico", {
     statusOsId: integer("status_os_id")
         .notNull()
         .references(() => statusOs.id),
-    ...timestamps()
+    ...timestamps(),
+    ...mockFlag()
 });
 
 export const itensServico = sqliteTable(
@@ -143,7 +154,8 @@ export const itensServico = sqliteTable(
             .references(() => ordensServico.id, { onDelete: "cascade" }),
         servicoId: integer("servico_id")
             .notNull()
-            .references(() => servicos.id)
+            .references(() => servicos.id),
+        ...mockFlag()
     },
     (table) => ({
         pk: primaryKey({ columns: [table.ordemServicoId, table.servicoId] })
@@ -158,7 +170,8 @@ export const responsaveis = sqliteTable(
             .references(() => usuarios.cpf),
         ordemServicoId: integer("ordem_servico_id")
             .notNull()
-            .references(() => ordensServico.id, { onDelete: "cascade" })
+            .references(() => ordensServico.id, { onDelete: "cascade" }),
+        ...mockFlag()
     },
     (table) => ({
         pk: primaryKey({ columns: [table.usuarioCpf, table.ordemServicoId] })
@@ -172,7 +185,8 @@ export const pagamentos = sqliteTable("pagamento", {
     regEntradaSaidaId: integer("reg_entrada_saida_id")
         .notNull()
         .references(() => registrosEntradaSaida.id, { onDelete: "cascade" }),
-    ...timestamps()
+    ...timestamps(),
+    ...mockFlag()
 });
 
 export const STATUS_OS = {
