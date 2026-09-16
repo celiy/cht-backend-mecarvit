@@ -7,11 +7,14 @@ import {
     pagamentos,
     registrosEntradaSaida,
     responsaveis,
+    servicos,
     STATUS_OS,
     statusOs,
     veiculos
 } from "../db/schema/index.js";
 import { AppError } from "../utils/AppError.js";
+import * as servicoService from "./servicoService.js";
+import { replacePagamentos, type PagamentoInput } from "./pagamentoSync.js";
 
 type ItemInput = {
     servicoId: number;
@@ -20,9 +23,12 @@ type ItemInput = {
     valorPecas?: number | null;
 };
 
-type PagamentoInput = {
-    tipo: string;
-    valor: number;
+type ItemInputDto = {
+    servicoId?: number;
+    servicoNome?: string;
+    quantidade: number;
+    valorObra: number;
+    valorPecas?: number | null;
 };
 
 function totalItens(itens: ItemInput[]): number {
@@ -34,6 +40,60 @@ function totalItens(itens: ItemInput[]): number {
 
 export async function listStatusOs(db: AppDatabase) {
     return db.select().from(statusOs);
+}
+
+const PAYMENT_EPSILON = 0.009;
+
+function isRegistroFullyPaid(valorRegistro: number, pagamentoRows: Array<{ valor: number }>): boolean {
+    const paid = pagamentoRows.reduce((sum, row) => sum + Number(row.valor), 0);
+
+    return paid + PAYMENT_EPSILON >= Number(valorRegistro);
+}
+
+/**
+ * OS ids considered fully paid (or not) based on linked entrada and pagamentos.
+ */
+export async function listOrdemServicoIdsByPagamento(
+    db: AppDatabase,
+    fullyPaid: boolean
+): Promise<number[]> {
+    const rows = await db
+        .select({
+            id: ordensServico.id,
+            regEntradaSaidaId: ordensServico.regEntradaSaidaId
+        })
+        .from(ordensServico);
+    const paid: number[] = [];
+    const unpaid: number[] = [];
+
+    for (const row of rows) {
+        if (!row.regEntradaSaidaId) {
+            unpaid.push(row.id);
+            continue;
+        }
+
+        const resRows = await db
+            .select()
+            .from(registrosEntradaSaida)
+            .where(eq(registrosEntradaSaida.id, row.regEntradaSaidaId))
+            .limit(1);
+        const registro = resRows[0];
+
+        if (!registro) {
+            unpaid.push(row.id);
+            continue;
+        }
+
+        const pagamentoRows = await loadPagamentos(db, row.regEntradaSaidaId);
+
+        if (isRegistroFullyPaid(registro.valor, pagamentoRows)) {
+            paid.push(row.id);
+        } else {
+            unpaid.push(row.id);
+        }
+    }
+
+    return fullyPaid ? paid : unpaid;
 }
 
 async function requireCliente(db: AppDatabase, documento: string) {
@@ -62,6 +122,31 @@ async function requireVeiculoDoCliente(db: AppDatabase, veiculoId: number, clien
     }
 
     return veiculo;
+}
+
+async function resolveItens(db: AppDatabase, items: ItemInputDto[]): Promise<ItemInput[]> {
+    const resolved: ItemInput[] = [];
+
+    for (const item of items) {
+        let servicoId = item.servicoId;
+
+        if (!servicoId || !Number.isInteger(servicoId) || servicoId <= 0) {
+            const servico = await servicoService.findOrCreateServicoByNome(
+                db,
+                String(item.servicoNome ?? "")
+            );
+            servicoId = servico.id;
+        }
+
+        resolved.push({
+            servicoId,
+            quantidade: Number(item.quantidade),
+            valorObra: Number(item.valorObra),
+            valorPecas: item.valorPecas == null ? null : Number(item.valorPecas)
+        });
+    }
+
+    return resolved;
 }
 
 async function loadItens(db: AppDatabase, osId: number): Promise<ItemInput[]> {
@@ -110,18 +195,6 @@ async function replaceResponsaveis(db: AppDatabase, osId: number, cpfs: string[]
     }
 }
 
-async function replacePagamentos(db: AppDatabase, resId: number, lista: PagamentoInput[]): Promise<void> {
-    await db.delete(pagamentos).where(eq(pagamentos.regEntradaSaidaId, resId));
-
-    for (const pagamento of lista) {
-        await db.insert(pagamentos).values({
-            tipo: pagamento.tipo.trim().toLowerCase(),
-            valor: Number(pagamento.valor),
-            regEntradaSaidaId: resId
-        });
-    }
-}
-
 async function syncFinanceiro(
     db: AppDatabase,
     osId: number,
@@ -142,8 +215,19 @@ async function syncFinanceiro(
     const nextPagamentos = options.pagamentos
         ? options.replacePagamentos
             ? options.pagamentos
-            : [...currentPagamentos.map((row) => ({ tipo: row.tipo, valor: row.valor })), ...options.pagamentos]
-        : currentPagamentos.map((row) => ({ tipo: row.tipo, valor: row.valor }));
+            : [
+                ...currentPagamentos.map((row) => ({
+                    id: row.id,
+                    tipo: row.tipo,
+                    valor: row.valor
+                })),
+                ...options.pagamentos
+            ]
+        : currentPagamentos.map((row) => ({
+            id: row.id,
+            tipo: row.tipo,
+            valor: row.valor
+        }));
     const hasPagamentos = nextPagamentos.length > 0;
     const concluida = os.statusOsId === STATUS_OS.CONCLUIDA;
     const shouldHaveRes = hasPagamentos || concluida;
@@ -197,7 +281,18 @@ export async function getOrdemServico(db: AppDatabase, id: number) {
         throw new AppError("Ordem de serviço não encontrada", 404);
     }
 
-    const itens = await db.select().from(itensServico).where(eq(itensServico.ordemServicoId, id));
+    const itens = await db
+        .select({
+            quantidade: itensServico.quantidade,
+            valorPecas: itensServico.valorPecas,
+            valorObra: itensServico.valorObra,
+            ordemServicoId: itensServico.ordemServicoId,
+            servicoId: itensServico.servicoId,
+            servicoNome: servicos.nome
+        })
+        .from(itensServico)
+        .innerJoin(servicos, eq(itensServico.servicoId, servicos.id))
+        .where(eq(itensServico.ordemServicoId, id));
     const responsavelRows = await db.select().from(responsaveis).where(eq(responsaveis.ordemServicoId, id));
     const statusRows = await db.select().from(statusOs).where(eq(statusOs.id, os.statusOsId)).limit(1);
     const pagamentoRows = await loadPagamentos(db, os.regEntradaSaidaId);
@@ -251,7 +346,7 @@ export async function createOrdemServico(
         obs?: string;
         dataInicio?: Date | string;
         dataConclusao?: Date | string;
-        itens?: ItemInput[];
+        itens?: ItemInputDto[];
         responsaveis?: string[];
         pagamentos?: PagamentoInput[];
         actorCpf: string;
@@ -291,7 +386,7 @@ export async function createOrdemServico(
     }
 
     if (dto.itens) {
-        await replaceItens(db, os.id, dto.itens);
+        await replaceItens(db, os.id, await resolveItens(db, dto.itens));
     }
 
     if (dto.responsaveis) {
@@ -318,7 +413,7 @@ export async function updateOrdemServico(
         obs?: string | null;
         dataInicio?: Date | string | null;
         dataConclusao?: Date | string | null;
-        itens?: ItemInput[];
+        itens?: ItemInputDto[];
         responsaveis?: string[];
         pagamentos?: PagamentoInput[];
         replaceNested: boolean;
@@ -386,7 +481,7 @@ export async function updateOrdemServico(
     }
 
     if (dto.itens !== undefined) {
-        await replaceItens(db, id, dto.itens);
+        await replaceItens(db, id, await resolveItens(db, dto.itens));
     }
 
     if (dto.responsaveis !== undefined) {

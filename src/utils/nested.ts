@@ -1,5 +1,12 @@
 import { digitsOnly } from "@shared/validators/mecarvit";
 
+/** PUT/PATCH body that only replaces the pagamentos list (modal de pagamentos). */
+export function isPagamentosOnlyBody(body: Record<string, unknown>): boolean {
+    const keys = Object.keys(body).filter((key) => body[key] !== undefined);
+
+    return keys.length === 1 && keys[0] === "pagamentos";
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
     if (value !== null && typeof value === "object" && !Array.isArray(value)) {
         return value as Record<string, unknown>;
@@ -8,15 +15,25 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     return null;
 }
 
-export function asPagamentos(value: unknown): Array<{ tipo: string; valor: number }> | undefined {
+export function asPagamentos(value: unknown): Array<{
+    id?: number;
+    tipo: string;
+    valor: number;
+}> | undefined {
     if (!Array.isArray(value)) {
         return undefined;
     }
 
     return value.map((item) => {
         const record = asRecord(item) ?? {};
+        const idRaw = record.id;
+        const id =
+            idRaw === undefined || idRaw === null || idRaw === ""
+                ? undefined
+                : Number(idRaw);
 
         return {
+            id: Number.isInteger(id) && id! > 0 ? id : undefined,
             tipo: String(record.tipo ?? ""),
             valor: Number(record.valor)
         };
@@ -24,7 +41,8 @@ export function asPagamentos(value: unknown): Array<{ tipo: string; valor: numbe
 }
 
 export function asItens(value: unknown): Array<{
-    servicoId: number;
+    servicoId?: number;
+    servicoNome?: string;
     quantidade: number;
     valorObra: number;
     valorPecas?: number | null;
@@ -35,9 +53,19 @@ export function asItens(value: unknown): Array<{
 
     return value.map((item) => {
         const record = asRecord(item) ?? {};
+        const servicoIdRaw = record.servicoId;
+        const servicoId =
+            servicoIdRaw === undefined || servicoIdRaw === null || servicoIdRaw === ""
+                ? undefined
+                : Number(servicoIdRaw);
+        const servicoNomeRaw = record.servicoNome;
 
         return {
-            servicoId: Number(record.servicoId),
+            servicoId: Number.isInteger(servicoId) && servicoId! > 0 ? servicoId : undefined,
+            servicoNome:
+                servicoNomeRaw === undefined || servicoNomeRaw === null
+                    ? undefined
+                    : String(servicoNomeRaw),
             quantidade: Number(record.quantidade),
             valorObra: Number(record.valorObra),
             valorPecas: record.valorPecas === undefined || record.valorPecas === null
@@ -61,6 +89,14 @@ export function asResponsaveis(value: unknown): string[] | undefined {
 
         return digitsOnly(String(record?.cpf ?? ""));
     });
+}
+
+export function asEnderecoIds(value: unknown): number[] | undefined {
+    if (!Array.isArray(value)) {
+        return undefined;
+    }
+
+    return value.map((item) => Number(item));
 }
 
 export function asEnderecos(value: unknown): Array<{

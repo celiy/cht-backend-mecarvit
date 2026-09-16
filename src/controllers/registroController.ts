@@ -4,18 +4,99 @@ import { catchAsync } from "../utils/catchAsync.js";
 import { ApiFeatures } from "../utils/ApiFeatures.js";
 import { parseId, requireDb, requireUser } from "../utils/http.js";
 import { throwIfInvalid, bodyOf } from "../utils/validate.js";
-import { registrosEntradaSaida } from "../db/schema/index.js";
+import { ordensServico, registrosEntradaSaida } from "../db/schema/index.js";
 import * as registroService from "../services/registroService.js";
 import { AppError } from "../utils/AppError.js";
-import { asPagamentos } from "../utils/nested.js";
+import { asPagamentos, isPagamentosOnlyBody } from "../utils/nested.js";
+import { inArray } from "drizzle-orm";
+
+function queryStringValue(query: Record<string, unknown>, key: string): string | undefined {
+    const raw = query[key];
+
+    if (typeof raw === "string") {
+        return raw;
+    }
+
+    if (Array.isArray(raw)) {
+        return raw[raw.length - 1] as string;
+    }
+
+    return undefined;
+}
 
 export const listRegistros = catchAsync(async (req: Request, res: Response) => {
     const db = requireDb(req);
-    const features = new ApiFeatures(db, registrosEntradaSaida, req.query as Record<string, unknown>)
+    const query = { ...(req.query as Record<string, unknown>) };
+    const ordemServicoRaw = queryStringValue(query, "ordemServicoId");
+    const pagoFilter = queryStringValue(query, "pago")?.trim().toLowerCase();
+
+    delete query.ordemServicoId;
+    delete query.pago;
+
+    const features = new ApiFeatures(db, registrosEntradaSaida, query)
         .filter()
         .sort()
         .limitFields()
         .paginate();
+
+    if (ordemServicoRaw?.trim()) {
+        const osIds = ordemServicoRaw
+            .split(",")
+            .map((part) => Number(part.trim()))
+            .filter((id) => Number.isInteger(id) && id > 0);
+
+        if (osIds.length === 0) {
+            res.status(200).json({
+                data: [],
+                page: features.pagination.page,
+                limit: features.pagination.limit,
+                total: 0
+            });
+
+            return;
+        }
+
+        const links = await db
+            .select({ regEntradaSaidaId: ordensServico.regEntradaSaidaId })
+            .from(ordensServico)
+            .where(inArray(ordensServico.id, osIds));
+        const registroIds = links
+            .map((row) => row.regEntradaSaidaId)
+            .filter((id): id is number => id != null);
+
+        if (registroIds.length === 0) {
+            res.status(200).json({
+                data: [],
+                page: features.pagination.page,
+                limit: features.pagination.limit,
+                total: 0
+            });
+
+            return;
+        }
+
+        features.whereExtra(inArray(registrosEntradaSaida.id, registroIds));
+    }
+
+    if (pagoFilter === "sim" || pagoFilter === "nao") {
+        const paidIds = await registroService.listRegistroIdsByPagamento(db, true);
+        const unpaidIds = await registroService.listRegistroIdsByPagamento(db, false);
+        const target = pagoFilter === "sim" ? paidIds : unpaidIds;
+
+        if (target.length === 0) {
+            res.status(200).json({
+                data: [],
+                page: features.pagination.page,
+                limit: features.pagination.limit,
+                total: 0
+            });
+
+            return;
+        }
+
+        features.whereExtra(inArray(registrosEntradaSaida.id, target));
+    }
+
     const rows = await features.exec();
     const total = await features.count();
     const data = [];
@@ -58,8 +139,13 @@ export const createRegistro = catchAsync(async (req: Request, res: Response) => 
 
 export const updateRegistro = catchAsync(async (req: Request, res: Response) => {
     const body = bodyOf(req);
+    const pagamentosOnly = isPagamentosOnlyBody(body);
 
-    throwIfInvalid(validateRegEntradaSaida(body, { partial: req.method === "PATCH" }));
+    throwIfInvalid(
+        validateRegEntradaSaida(body, {
+            partial: req.method !== "POST" || pagamentosOnly
+        })
+    );
 
     const updated = await registroService.updateRegistro(
         requireDb(req),

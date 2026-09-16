@@ -1,4 +1,6 @@
 import { eq } from "drizzle-orm";
+import * as enderecoService from "./enderecoService.js";
+import type { EnderecoFields } from "../utils/enderecoNormalize.js";
 import { digitsOnly } from "@shared/validators/mecarvit";
 import type { AppDatabase } from "../config/database.js";
 import {
@@ -54,54 +56,51 @@ export async function clienteTemVinculoOperacional(db: AppDatabase, documento: s
     return false;
 }
 
-async function replaceEnderecos(
+async function syncClienteEnderecoLinks(
     db: AppDatabase,
     documento: string,
-    lista: Array<{
-        estado: string;
-        cidade: string;
-        cep: string;
-        bairro: string;
-        rua: string;
-        numero: number;
-        complemento: string;
-    }>
+    enderecoIds: number[]
 ): Promise<void> {
-    const atuais = await db
-        .select()
-        .from(enderecosCliente)
-        .where(eq(enderecosCliente.clienteDocumento, documento));
+    const uniqueIds = [...new Set(enderecoIds)];
+
+    if (uniqueIds.length !== enderecoIds.length) {
+        throw new AppError("O cliente não pode ter o mesmo endereço mais de uma vez", 400);
+    }
+
+    for (const id of uniqueIds) {
+        await enderecoService.getEndereco(db, id);
+    }
 
     await db.delete(enderecosCliente).where(eq(enderecosCliente.clienteDocumento, documento));
 
-    for (const link of atuais) {
-        await db.delete(enderecos).where(eq(enderecos.id, link.enderecoId));
-    }
-
-    for (const item of lista) {
-        const inserted = await db
-            .insert(enderecos)
-            .values({
-                estado: item.estado.trim(),
-                cidade: item.cidade.trim(),
-                cep: item.cep.trim(),
-                bairro: item.bairro.trim(),
-                rua: item.rua.trim(),
-                numero: Number(item.numero),
-                complemento: item.complemento.trim()
-            })
-            .returning();
-        const endereco = inserted[0];
-
-        if (!endereco) {
-            continue;
-        }
-
+    for (const enderecoId of uniqueIds) {
         await db.insert(enderecosCliente).values({
             clienteDocumento: documento,
-            enderecoId: endereco.id
+            enderecoId
         });
     }
+}
+
+async function resolveClienteEnderecoIds(
+    db: AppDatabase,
+    enderecoIds?: number[],
+    enderecos?: EnderecoFields[]
+): Promise<number[] | undefined> {
+    if (enderecoIds !== undefined) {
+        return enderecoIds;
+    }
+
+    if (enderecos === undefined) {
+        return undefined;
+    }
+
+    const ids: number[] = [];
+
+    for (const item of enderecos) {
+        ids.push(await enderecoService.findOrCreateEndereco(db, item));
+    }
+
+    return [...new Set(ids)];
 }
 
 export async function getClienteDetalhe(db: AppDatabase, documento: string) {
@@ -149,15 +148,8 @@ export async function createCliente(
         obs?: string;
         usuarioCpf: string;
         ativo?: boolean;
-        enderecos?: Array<{
-            estado: string;
-            cidade: string;
-            cep: string;
-            bairro: string;
-            rua: string;
-            numero: number;
-            complemento: string;
-        }>;
+        enderecoIds?: number[];
+        enderecos?: EnderecoFields[];
         veiculos?: Array<{
             modelo: string;
             placa: string;
@@ -188,8 +180,14 @@ export async function createCliente(
         throw new AppError("Não foi possível criar o cliente", 500);
     }
 
-    if (dto.enderecos) {
-        await replaceEnderecos(db, documento, dto.enderecos);
+    const resolvedEnderecoIds = await resolveClienteEnderecoIds(
+        db,
+        dto.enderecoIds,
+        dto.enderecos
+    );
+
+    if (resolvedEnderecoIds) {
+        await syncClienteEnderecoLinks(db, documento, resolvedEnderecoIds);
     }
 
     if (dto.veiculos) {
@@ -220,15 +218,8 @@ export async function updateCliente(
         email?: string | null;
         obs?: string | null;
         ativo?: boolean;
-        enderecos?: Array<{
-            estado: string;
-            cidade: string;
-            cep: string;
-            bairro: string;
-            rua: string;
-            numero: number;
-            complemento: string;
-        }>;
+        enderecoIds?: number[];
+        enderecos?: EnderecoFields[];
         veiculos?: Array<{
             modelo: string;
             placa: string;
@@ -271,8 +262,14 @@ export async function updateCliente(
         await db.update(clientes).set(patch).where(eq(clientes.documento, current.documento));
     }
 
-    if (dto.enderecos !== undefined) {
-        await replaceEnderecos(db, current.documento, dto.enderecos);
+    if (dto.enderecoIds !== undefined || dto.enderecos !== undefined) {
+        const resolvedEnderecoIds = await resolveClienteEnderecoIds(
+            db,
+            dto.enderecoIds,
+            dto.enderecos
+        );
+
+        await syncClienteEnderecoLinks(db, current.documento, resolvedEnderecoIds ?? []);
     }
 
     if (dto.veiculos !== undefined) {
@@ -316,7 +313,7 @@ export async function deleteCliente(db: AppDatabase, documento: string) {
     }
 
     await db.delete(veiculos).where(eq(veiculos.clienteDocumento, current.documento));
-    await replaceEnderecos(db, current.documento, []);
+    await syncClienteEnderecoLinks(db, current.documento, []);
     await db.delete(clientes).where(eq(clientes.documento, current.documento));
 
     return current;

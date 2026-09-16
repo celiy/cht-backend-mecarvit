@@ -61,7 +61,8 @@ export const updateVeiculo = catchAsync(async (req: Request, res: Response) => {
         kilometragem: body.kilometragem === undefined ? undefined : Number(body.kilometragem),
         dataTrocaOleo: body.dataTrocaOleo as string | undefined,
         chassi: body.chassi as string | undefined,
-        ativo: body.ativo as boolean | undefined
+        ativo: body.ativo as boolean | undefined,
+        clienteDocumento: body.clienteDocumento as string | undefined
     });
 
     res.status(200).json({ data: updated });

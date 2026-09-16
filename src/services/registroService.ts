@@ -2,6 +2,45 @@ import { eq, sql } from "drizzle-orm";
 import type { AppDatabase } from "../config/database.js";
 import { ordensServico, pagamentos, registrosEntradaSaida, statusOs } from "../db/schema/index.js";
 import { AppError } from "../utils/AppError.js";
+import { replacePagamentos, type PagamentoInput } from "./pagamentoSync.js";
+
+const PAYMENT_EPSILON = 0.009;
+
+function isRegistroFullyPaid(valorRegistro: number, pagamentoRows: Array<{ valor: number }>): boolean {
+    const paid = pagamentoRows.reduce((sum, row) => sum + Number(row.valor), 0);
+
+    return paid + PAYMENT_EPSILON >= Number(valorRegistro);
+}
+
+/** Registro ids fully paid (or not) by sum of pagamentos vs valor. */
+export async function listRegistroIdsByPagamento(
+    db: AppDatabase,
+    fullyPaid: boolean
+): Promise<number[]> {
+    const rows = await db
+        .select({
+            id: registrosEntradaSaida.id,
+            valor: registrosEntradaSaida.valor
+        })
+        .from(registrosEntradaSaida);
+    const paid: number[] = [];
+    const unpaid: number[] = [];
+
+    for (const row of rows) {
+        const pagamentoRows = await db
+            .select()
+            .from(pagamentos)
+            .where(eq(pagamentos.regEntradaSaidaId, row.id));
+
+        if (isRegistroFullyPaid(row.valor, pagamentoRows)) {
+            paid.push(row.id);
+        } else {
+            unpaid.push(row.id);
+        }
+    }
+
+    return fullyPaid ? paid : unpaid;
+}
 
 export async function getRegistro(db: AppDatabase, id: number) {
     const rows = await db.select().from(registrosEntradaSaida).where(eq(registrosEntradaSaida.id, id)).limit(1);
@@ -21,22 +60,6 @@ export async function getRegistro(db: AppDatabase, id: number) {
     };
 }
 
-async function replacePagamentos(
-    db: AppDatabase,
-    resId: number,
-    lista: Array<{ tipo: string; valor: number }>
-): Promise<void> {
-    await db.delete(pagamentos).where(eq(pagamentos.regEntradaSaidaId, resId));
-
-    for (const pagamento of lista) {
-        await db.insert(pagamentos).values({
-            tipo: pagamento.tipo.trim().toLowerCase(),
-            valor: Number(pagamento.valor),
-            regEntradaSaidaId: resId
-        });
-    }
-}
-
 export async function createRegistro(
     db: AppDatabase,
     dto: {
@@ -46,7 +69,7 @@ export async function createRegistro(
         descricao?: string;
         dataLimitePagamento?: Date | string;
         usuarioCpf: string;
-        pagamentos?: Array<{ tipo: string; valor: number }>;
+        pagamentos?: PagamentoInput[];
     }
 ) {
     const inserted = await db
@@ -82,7 +105,7 @@ export async function updateRegistro(
         valor?: number;
         descricao?: string | null;
         dataLimitePagamento?: Date | string | null;
-        pagamentos?: Array<{ tipo: string; valor: number }>;
+        pagamentos?: PagamentoInput[];
         replaceNested: boolean;
     }
 ) {
@@ -91,6 +114,17 @@ export async function updateRegistro(
     if (current.ordemServico && dto.tipo !== undefined && dto.tipo.trim().toLowerCase() !== "entrada") {
         throw new AppError("Registro gerado por OS deve permanecer como entrada", 409, {
             tipo: "Não altere o tipo de um lançamento ligado a OS"
+        });
+    }
+
+    if (
+        current.ordemServico
+        && current.tipo.trim().toLowerCase() === "entrada"
+        && dto.valor !== undefined
+        && Number(dto.valor) !== Number(current.valor)
+    ) {
+        throw new AppError("Valor de entrada gerada por OS não pode ser alterado", 409, {
+            valor: "O valor é definido pela ordem de serviço"
         });
     }
 
@@ -121,7 +155,18 @@ export async function updateRegistro(
     }
 
     if (dto.pagamentos !== undefined) {
-        await replacePagamentos(db, id, dto.pagamentos);
+        const merged = dto.replaceNested
+            ? dto.pagamentos
+            : [
+                ...current.pagamentos.map((row) => ({
+                    id: row.id,
+                    tipo: row.tipo,
+                    valor: Number(row.valor)
+                })),
+                ...dto.pagamentos
+            ];
+
+        await replacePagamentos(db, id, merged);
     }
 
     return getRegistro(db, id);

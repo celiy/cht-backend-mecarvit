@@ -78,6 +78,7 @@ export async function updateVeiculo(
         dataTrocaOleo?: Date | string | null;
         chassi?: string | null;
         ativo?: boolean;
+        clienteDocumento?: string;
     }
 ) {
     await getVeiculo(db, id);
@@ -110,6 +111,17 @@ export async function updateVeiculo(
 
     if (dto.ativo !== undefined) {
         patch.ativo = dto.ativo;
+    }
+
+    if (dto.clienteDocumento !== undefined) {
+        const documento = digitsOnly(dto.clienteDocumento);
+        const clienteRows = await db.select().from(clientes).where(eq(clientes.documento, documento)).limit(1);
+
+        if (!clienteRows[0]) {
+            throw new AppError("Cliente não encontrado", 404, { clienteDocumento: "Cliente não encontrado" });
+        }
+
+        patch.clienteDocumento = documento;
     }
 
     if (Object.keys(patch).length > 0) {

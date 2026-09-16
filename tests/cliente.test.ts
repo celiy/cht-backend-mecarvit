@@ -49,6 +49,48 @@ describe("cliente, veiculo, empresa e cargo", () => {
             .expect(404);
     });
 
+    it("compartilha endereço entre clientes e rejeita endereço duplicado", async () => {
+        const oficina = await cadastrarOficina(app);
+        const token = oficina.token as string;
+        const documentoA = uniqueCpf();
+        const documentoB = uniqueCpf();
+
+        const clienteA = await request(app)
+            .post("/api/cliente")
+            .set(bearer(token))
+            .send({
+                documento: documentoA,
+                nome: "Cliente A",
+                enderecos: [enderecoPadrao]
+            })
+            .expect(201);
+
+        const enderecoId = clienteA.body.data.enderecos[0].id as number;
+
+        await request(app)
+            .post("/api/endereco")
+            .set(bearer(token))
+            .send(enderecoPadrao)
+            .expect(409);
+
+        await request(app)
+            .post("/api/cliente")
+            .set(bearer(token))
+            .send({
+                documento: documentoB,
+                nome: "Cliente B",
+                enderecoIds: [enderecoId]
+            })
+            .expect(201);
+
+        const clienteB = await request(app)
+            .get(`/api/cliente/${documentoB}`)
+            .set(bearer(token))
+            .expect(200);
+
+        expect(clienteB.body.data.enderecos[0].id).toBe(enderecoId);
+    });
+
     it("rejeita documento inválido, CNPJ inválido, campos vazios e duplicado", async () => {
         const oficina = await cadastrarOficina(app);
         const token = oficina.token as string;
@@ -144,6 +186,46 @@ describe("cliente, veiculo, empresa e cargo", () => {
             .set(bearer(token))
             .send({ ativo: false })
             .expect(200);
+    });
+
+    it("altera o dono do veículo na edição", async () => {
+        const oficina = await cadastrarOficina(app);
+        const token = oficina.token as string;
+        const dono = uniqueCpf();
+        const novoDono = uniqueCpf();
+
+        const veiculoRes = await request(app)
+            .post("/api/cliente")
+            .set(bearer(token))
+            .send({
+                documento: dono,
+                nome: "Dono original",
+                veiculos: [{ modelo: "Gol", placa: "ABC1D23" }]
+            })
+            .expect(201);
+
+        await request(app)
+            .post("/api/cliente")
+            .set(bearer(token))
+            .send({
+                documento: novoDono,
+                nome: "Novo dono"
+            })
+            .expect(201);
+
+        const veiculoId = veiculoRes.body.data.veiculos[0].id as number;
+
+        const updated = await request(app)
+            .put(`/api/veiculo/${veiculoId}`)
+            .set(bearer(token))
+            .send({
+                modelo: "Gol",
+                placa: "ABC1D23",
+                clienteDocumento: novoDono
+            })
+            .expect(200);
+
+        expect(updated.body.data.clienteDocumento).toBe(novoDono);
     });
 
     it("atualiza empresa do JWT e rejeita id de outra oficina", async () => {

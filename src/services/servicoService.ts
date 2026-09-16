@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { AppDatabase } from "../config/database.js";
 import { itensServico, servicos } from "../db/schema/index.js";
 import { AppError } from "../utils/AppError.js";
@@ -16,6 +16,27 @@ export async function getServico(db: AppDatabase, id: number) {
     }
 
     return servico;
+}
+
+export async function findOrCreateServicoByNome(db: AppDatabase, nome: string) {
+    const trimmed = nome.trim();
+
+    if (!trimmed) {
+        throw new AppError("Nome do serviço é obrigatório", 400, { nome: "Nome do serviço é obrigatório" });
+    }
+
+    const existing = await db
+        .select()
+        .from(servicos)
+        .where(sql`lower(${servicos.nome}) = lower(${trimmed})`)
+        .limit(1);
+    const found = existing[0];
+
+    if (found) {
+        return found;
+    }
+
+    return createServico(db, { nome: trimmed });
 }
 
 export async function createServico(db: AppDatabase, dto: { nome: string }) {

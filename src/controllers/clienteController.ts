@@ -6,7 +6,7 @@ import { defaultAtivoQuery, requireDb, requireUser } from "../utils/http.js";
 import { throwIfInvalid, bodyOf } from "../utils/validate.js";
 import { clientes } from "../db/schema/index.js";
 import * as clienteService from "../services/clienteService.js";
-import { asEnderecos, asVeiculos } from "../utils/nested.js";
+import { asEnderecoIds, asEnderecos, asVeiculos } from "../utils/nested.js";
 
 export const listClientes = catchAsync(async (req: Request, res: Response) => {
     const db = requireDb(req);
@@ -54,6 +54,7 @@ export const createCliente = catchAsync(async (req: Request, res: Response) => {
         obs: body.obs as string | undefined,
         ativo: body.ativo as boolean | undefined,
         usuarioCpf: requireUser(req).cpf,
+        enderecoIds: asEnderecoIds(body.enderecoIds),
         enderecos: asEnderecos(body.enderecos),
         veiculos: asVeiculos(body.veiculos)
     });
@@ -64,7 +65,7 @@ export const createCliente = catchAsync(async (req: Request, res: Response) => {
 export const updateCliente = catchAsync(async (req: Request, res: Response) => {
     const body = bodyOf(req);
 
-    throwIfInvalid(validateCliente(body, { partial: req.method === "PATCH" }));
+    throwIfInvalid(validateCliente(body, { partial: true }));
 
     const updated = await clienteService.updateCliente(
         requireDb(req),
@@ -76,6 +77,7 @@ export const updateCliente = catchAsync(async (req: Request, res: Response) => {
             email: body.email as string | undefined,
             obs: body.obs as string | undefined,
             ativo: body.ativo as boolean | undefined,
+            enderecoIds: asEnderecoIds(body.enderecoIds),
             enderecos: asEnderecos(body.enderecos),
             veiculos: asVeiculos(body.veiculos),
             replaceNested: req.method === "PUT"

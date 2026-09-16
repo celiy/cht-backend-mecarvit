@@ -96,6 +96,79 @@ describe("ordem de serviço, financeiro e dashboard", () => {
             .expect(409);
     });
 
+    it("PUT de pagamentos preserva criadoEm dos itens não alterados", async () => {
+        const ctx = await seedOperacao();
+        const created = await request(app)
+            .post("/api/ordem-servico")
+            .set(bearer(ctx.token))
+            .send({
+                clienteDocumento: ctx.documento,
+                veiculoId: ctx.veiculoId,
+                itens: [{ servicoId: ctx.servicoId, quantidade: 1, valorObra: 100 }]
+            })
+            .expect(201);
+        const osId = created.body.data.id as number;
+
+        const firstSave = await request(app)
+            .put(`/api/ordem-servico/${osId}`)
+            .set(bearer(ctx.token))
+            .send({
+                pagamentos: [
+                    { tipo: "dinheiro", valor: 40 },
+                    { tipo: "pix", valor: 30 }
+                ]
+            })
+            .expect(200);
+
+        const original = firstSave.body.data.pagamentos as Array<{
+            id: number;
+            tipo: string;
+            valor: number;
+            criadoEm: string;
+            modificadoEm: string;
+        }>;
+
+        expect(original).toHaveLength(2);
+
+        const kept = original[0];
+        const edited = original[1];
+
+        expect(kept).toBeTruthy();
+        expect(edited).toBeTruthy();
+
+        await new Promise((resolve) => {
+            setTimeout(resolve, 1200);
+        });
+
+        const secondSave = await request(app)
+            .put(`/api/ordem-servico/${osId}`)
+            .set(bearer(ctx.token))
+            .send({
+                pagamentos: [
+                    { id: kept!.id, tipo: kept!.tipo, valor: kept!.valor },
+                    { id: edited!.id, tipo: edited!.tipo, valor: 35 }
+                ]
+            })
+            .expect(200);
+
+        const next = secondSave.body.data.pagamentos as Array<{
+            id: number;
+            valor: number;
+            criadoEm: string;
+            modificadoEm: string;
+        }>;
+        const keptNext = next.find((row) => row.id === kept!.id);
+        const editedNext = next.find((row) => row.id === edited!.id);
+
+        expect(keptNext?.criadoEm).toBe(kept!.criadoEm);
+        expect(keptNext?.modificadoEm).toBe(kept!.modificadoEm);
+        expect(editedNext?.criadoEm).toBe(edited!.criadoEm);
+        expect(editedNext?.valor).toBe(35);
+        expect(new Date(editedNext!.modificadoEm).getTime()).toBeGreaterThan(
+            new Date(edited!.modificadoEm).getTime()
+        );
+    });
+
     it("reabrir concluída sem pagamento remove o RES; cancelar com pagamento retorna 409", async () => {
         const ctx = await seedOperacao();
 

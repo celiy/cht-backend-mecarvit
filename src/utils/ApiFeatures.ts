@@ -5,9 +5,11 @@ import {
     eq,
     gt,
     gte,
+    inArray,
     like,
     lt,
     lte,
+    or,
     sql,
     type AnyColumn,
     type SQL,
@@ -22,7 +24,16 @@ type QueryString = Record<string, unknown>;
 const OPERATORS = ["gte", "gt", "lte", "lt"] as const;
 type Operator = typeof OPERATORS[number];
 
-const RESERVED = new Set(["sort", "page", "limit", "fields"]);
+const RESERVED = new Set([
+    "sort",
+    "page",
+    "limit",
+    "fields",
+    "cliente",
+    "veiculo",
+    "paga",
+    "ordemServicoId"
+]);
 
 function isOperator(value: string): value is Operator {
     return (OPERATORS as readonly string[]).includes(value);
@@ -44,6 +55,38 @@ function coerce(raw: string): string | number | Date {
 
 function isTextColumn(column: AnyColumn): boolean {
     return column.dataType === "string";
+}
+
+function isBooleanColumn(column: AnyColumn): boolean {
+    return column.dataType === "boolean";
+}
+
+/**
+ * UI sends `ativo`, `inativo`, or `ativo,inativo` for boolean `ativo` columns.
+ * Returns `null` when both statuses are requested (no filter).
+ */
+function booleanStatusFilter(raw: string): boolean | null | undefined {
+    const tokens = raw
+        .split(",")
+        .map((part) => part.trim().toLowerCase())
+        .filter(Boolean);
+
+    const wantsAtivo = tokens.includes("ativo") || tokens.includes("true");
+    const wantsInativo = tokens.includes("inativo") || tokens.includes("false");
+
+    if (wantsAtivo && wantsInativo) {
+        return null;
+    }
+
+    if (wantsAtivo) {
+        return true;
+    }
+
+    if (wantsInativo) {
+        return false;
+    }
+
+    return undefined;
 }
 
 /** CPF/CNPJ/phone with punctuation still match digit-only columns. */
@@ -154,6 +197,26 @@ export class ApiFeatures<TTable extends SQLiteTable> {
             const raw = toStringValue(rawValue as QueryValue);
             if (raw === undefined) continue;
 
+            if (isBooleanColumn(column)) {
+                if (raw === "true" || raw === "false") {
+                    this.whereConds.push(eq(column, raw === "true"));
+                    continue;
+                }
+
+                const status = booleanStatusFilter(raw);
+
+                if (status === null) {
+                    continue;
+                }
+
+                if (status !== undefined) {
+                    this.whereConds.push(eq(column, status));
+                    continue;
+                }
+
+                continue;
+            }
+
             if (raw === "true" || raw === "false") {
                 this.whereConds.push(eq(column, raw === "true"));
                 continue;
@@ -236,6 +299,13 @@ export class ApiFeatures<TTable extends SQLiteTable> {
         const offset = (page - 1) * limit;
 
         this.paginateInfo = { page, limit, offset };
+        return this;
+    }
+
+    /** Adds a raw WHERE clause (e.g. from join-based list filters). */
+    whereExtra(condition: SQL): this {
+        this.whereConds.push(condition);
+
         return this;
     }
 
