@@ -282,6 +282,48 @@ describe("ordem de serviço, financeiro e dashboard", () => {
             .expect(409);
     });
 
+    it("limpa observações e diagnósticos com null no PUT", async () => {
+        const ctx = await seedOperacao();
+
+        const created = await request(app)
+            .post("/api/ordem-servico")
+            .set(bearer(ctx.token))
+            .send({
+                clienteDocumento: ctx.documento,
+                veiculoId: ctx.veiculoId,
+                obs: "Observação da OS",
+                diagnosticoCliente: "Barulho na suspensão",
+                diagnosticoMecanico: "Amortecedor",
+                itens: [{ servicoId: ctx.servicoId, quantidade: 1, valorObra: 50 }]
+            })
+            .expect(201);
+
+        const osId = created.body.data.id as number;
+
+        await request(app)
+            .put(`/api/ordem-servico/${osId}`)
+            .set(bearer(ctx.token))
+            .send({
+                clienteDocumento: ctx.documento,
+                veiculoId: ctx.veiculoId,
+                statusOsId: created.body.data.statusOsId,
+                obs: null,
+                diagnosticoCliente: null,
+                diagnosticoMecanico: null,
+                itens: [{ servicoId: ctx.servicoId, quantidade: 1, valorObra: 50 }]
+            })
+            .expect(200);
+
+        const got = await request(app)
+            .get(`/api/ordem-servico/${osId}`)
+            .set(bearer(ctx.token))
+            .expect(200);
+
+        expect(got.body.data.obs).toBeNull();
+        expect(got.body.data.diagnosticoCliente).toBeNull();
+        expect(got.body.data.diagnosticoMecanico).toBeNull();
+    });
+
     it("não exclui OS com itens, pagamento ou entrada ligada; exclui OS vazia", async () => {
         const ctx = await seedOperacao();
 

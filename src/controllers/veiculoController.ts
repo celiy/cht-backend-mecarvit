@@ -7,6 +7,18 @@ import { throwIfInvalid, bodyOf } from "../utils/validate.js";
 import { veiculos } from "../db/schema/index.js";
 import * as veiculoService from "../services/veiculoService.js";
 
+function parseKilometragemBody(value: unknown): number | null | undefined {
+    if (value === undefined) {
+        return undefined;
+    }
+
+    if (value === null) {
+        return null;
+    }
+
+    return Number(value);
+}
+
 export const listVeiculos = catchAsync(async (req: Request, res: Response) => {
     const db = requireDb(req);
     const features = new ApiFeatures(db, veiculos, req.query as Record<string, unknown>)
@@ -41,7 +53,7 @@ export const createVeiculo = catchAsync(async (req: Request, res: Response) => {
         placa: String(body.placa),
         clienteDocumento: String(body.clienteDocumento),
         tipo: body.tipo as string | undefined,
-        kilometragem: body.kilometragem === undefined ? undefined : Number(body.kilometragem),
+        kilometragem: parseKilometragemBody(body.kilometragem),
         dataTrocaOleo: body.dataTrocaOleo as string | undefined,
         chassi: body.chassi as string | undefined
     });
@@ -58,7 +70,7 @@ export const updateVeiculo = catchAsync(async (req: Request, res: Response) => {
         modelo: body.modelo as string | undefined,
         placa: body.placa as string | undefined,
         tipo: body.tipo as string | undefined,
-        kilometragem: body.kilometragem === undefined ? undefined : Number(body.kilometragem),
+        kilometragem: parseKilometragemBody(body.kilometragem),
         dataTrocaOleo: body.dataTrocaOleo as string | undefined,
         chassi: body.chassi as string | undefined,
         ativo: body.ativo as boolean | undefined,

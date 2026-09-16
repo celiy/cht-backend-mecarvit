@@ -6,7 +6,7 @@ import { defaultAtivoQuery, requireDb, requireUser } from "../utils/http.js";
 import { throwIfInvalid, bodyOf } from "../utils/validate.js";
 import { clientes } from "../db/schema/index.js";
 import * as clienteService from "../services/clienteService.js";
-import { asEnderecoIds, asEnderecos, asVeiculos } from "../utils/nested.js";
+import { asEnderecoIds, asEnderecos, asVeiculos, bodyOptionalPhone, bodyOptionalString } from "../utils/nested.js";
 
 export const listClientes = catchAsync(async (req: Request, res: Response) => {
     const db = requireDb(req);
@@ -48,10 +48,10 @@ export const createCliente = catchAsync(async (req: Request, res: Response) => {
     const created = await clienteService.createCliente(requireDb(req), {
         documento: String(body.documento),
         nome: String(body.nome),
-        nomeSocial: body.nomeSocial as string | undefined,
-        cel: (body.cel ?? body.telefone) as string | undefined,
-        email: body.email as string | undefined,
-        obs: body.obs as string | undefined,
+        nomeSocial: bodyOptionalString(body, "nomeSocial"),
+        cel: bodyOptionalPhone(body, "cel", "telefone"),
+        email: bodyOptionalString(body, "email"),
+        obs: bodyOptionalString(body, "obs"),
         ativo: body.ativo as boolean | undefined,
         usuarioCpf: requireUser(req).cpf,
         enderecoIds: asEnderecoIds(body.enderecoIds),
@@ -72,10 +72,10 @@ export const updateCliente = catchAsync(async (req: Request, res: Response) => {
         String(req.params.documento),
         {
             nome: body.nome as string | undefined,
-            nomeSocial: body.nomeSocial as string | undefined,
-            cel: (body.cel ?? body.telefone) as string | undefined,
-            email: body.email as string | undefined,
-            obs: body.obs as string | undefined,
+            nomeSocial: bodyOptionalString(body, "nomeSocial"),
+            cel: bodyOptionalPhone(body, "cel", "telefone"),
+            email: bodyOptionalString(body, "email"),
+            obs: bodyOptionalString(body, "obs"),
             ativo: body.ativo as boolean | undefined,
             enderecoIds: asEnderecoIds(body.enderecoIds),
             enderecos: asEnderecos(body.enderecos),

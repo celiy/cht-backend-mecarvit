@@ -341,11 +341,11 @@ export async function createOrdemServico(
         clienteDocumento: string;
         veiculoId: number;
         statusOsId?: number;
-        diagnosticoCliente?: string;
-        diagnosticoMecanico?: string;
-        obs?: string;
-        dataInicio?: Date | string;
-        dataConclusao?: Date | string;
+        diagnosticoCliente?: string | null;
+        diagnosticoMecanico?: string | null;
+        obs?: string | null;
+        dataInicio?: Date | string | null;
+        dataConclusao?: Date | string | null;
         itens?: ItemInputDto[];
         responsaveis?: string[];
         pagamentos?: PagamentoInput[];

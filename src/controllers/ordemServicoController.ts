@@ -6,7 +6,7 @@ import { parseId, requireDb, requireUser } from "../utils/http.js";
 import { throwIfInvalid, bodyOf } from "../utils/validate.js";
 import { clientes, ordensServico, statusOs, veiculos } from "../db/schema/index.js";
 import * as ordemServicoService from "../services/ordemServicoService.js";
-import { asItens, asPagamentos, asResponsaveis, isPagamentosOnlyBody } from "../utils/nested.js";
+import { asItens, asPagamentos, asResponsaveis, bodyOptionalString, isPagamentosOnlyBody } from "../utils/nested.js";
 import { eq, inArray, like, or, sql } from "drizzle-orm";
 
 export const listStatusOs = catchAsync(async (req: Request, res: Response) => {
@@ -180,11 +180,11 @@ export const createOs = catchAsync(async (req: Request, res: Response) => {
         clienteDocumento: String(body.clienteDocumento),
         veiculoId: Number(body.veiculoId),
         statusOsId: body.statusOsId === undefined ? undefined : Number(body.statusOsId),
-        diagnosticoCliente: body.diagnosticoCliente as string | undefined,
-        diagnosticoMecanico: body.diagnosticoMecanico as string | undefined,
-        obs: (body.obs ?? body.observacao) as string | undefined,
-        dataInicio: body.dataInicio as string | undefined,
-        dataConclusao: body.dataConclusao as string | undefined,
+        diagnosticoCliente: bodyOptionalString(body, "diagnosticoCliente"),
+        diagnosticoMecanico: bodyOptionalString(body, "diagnosticoMecanico"),
+        obs: bodyOptionalString(body, "obs", "observacao"),
+        dataInicio: bodyOptionalString(body, "dataInicio"),
+        dataConclusao: bodyOptionalString(body, "dataConclusao"),
         itens: asItens(body.itens),
         responsaveis: asResponsaveis(body.responsaveis),
         pagamentos: asPagamentos(body.pagamentos),
@@ -211,11 +211,11 @@ export const updateOs = catchAsync(async (req: Request, res: Response) => {
             clienteDocumento: body.clienteDocumento as string | undefined,
             veiculoId: body.veiculoId === undefined ? undefined : Number(body.veiculoId),
             statusOsId: body.statusOsId === undefined ? undefined : Number(body.statusOsId),
-            diagnosticoCliente: body.diagnosticoCliente as string | undefined,
-            diagnosticoMecanico: body.diagnosticoMecanico as string | undefined,
-            obs: (body.obs ?? body.observacao) as string | undefined,
-            dataInicio: body.dataInicio as string | undefined,
-            dataConclusao: body.dataConclusao as string | undefined,
+            diagnosticoCliente: bodyOptionalString(body, "diagnosticoCliente"),
+            diagnosticoMecanico: bodyOptionalString(body, "diagnosticoMecanico"),
+            obs: bodyOptionalString(body, "obs", "observacao"),
+            dataInicio: bodyOptionalString(body, "dataInicio"),
+            dataConclusao: bodyOptionalString(body, "dataConclusao"),
             itens: asItens(body.itens),
             responsaveis: asResponsaveis(body.responsaveis),
             pagamentos: asPagamentos(body.pagamentos),

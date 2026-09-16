@@ -1,5 +1,56 @@
 import { digitsOnly } from "@shared/validators/mecarvit";
 
+function normalizeNullableString(value: unknown): string | null {
+    if (value === null) {
+        return null;
+    }
+
+    const text = String(value ?? "").trim();
+
+    return text ? text : null;
+}
+
+/**
+ * Reads a string field from the JSON body.
+ * Explicit `null` clears the field; absent keys yield `undefined`.
+ */
+export function bodyOptionalString(
+    body: Record<string, unknown>,
+    key: string,
+    altKey?: string
+): string | null | undefined {
+    if (Object.prototype.hasOwnProperty.call(body, key)) {
+        return normalizeNullableString(body[key]);
+    }
+
+    if (altKey && Object.prototype.hasOwnProperty.call(body, altKey)) {
+        return normalizeNullableString(body[altKey]);
+    }
+
+    return undefined;
+}
+
+/** Like `bodyOptionalString`, but stores phone numbers as digits only. */
+export function bodyOptionalPhone(
+    body: Record<string, unknown>,
+    key: string,
+    altKey?: string
+): string | null | undefined {
+    const raw = bodyOptionalString(body, key, altKey);
+
+    if (raw === undefined) {
+        return undefined;
+    }
+
+    if (raw === null) {
+        return null;
+    }
+
+    const digits = digitsOnly(raw);
+
+    return digits ? digits : null;
+}
+
 /** PUT/PATCH body that only replaces the pagamentos list (modal de pagamentos). */
 export function isPagamentosOnlyBody(body: Record<string, unknown>): boolean {
     const keys = Object.keys(body).filter((key) => body[key] !== undefined);

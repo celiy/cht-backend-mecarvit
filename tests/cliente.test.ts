@@ -188,6 +188,43 @@ describe("cliente, veiculo, empresa e cargo", () => {
             .expect(200);
     });
 
+    it("limpa celular, email e observação com null no PATCH", async () => {
+        const oficina = await cadastrarOficina(app);
+        const token = oficina.token as string;
+        const documento = uniqueCpf();
+
+        await request(app)
+            .post("/api/cliente")
+            .set(bearer(token))
+            .send({
+                documento,
+                nome: "Cliente com contato",
+                cel: "11987654321",
+                email: "contato@example.com",
+                obs: "Observação inicial"
+            })
+            .expect(201);
+
+        await request(app)
+            .patch(`/api/cliente/${documento}`)
+            .set(bearer(token))
+            .send({
+                cel: null,
+                email: null,
+                obs: null
+            })
+            .expect(200);
+
+        const got = await request(app)
+            .get(`/api/cliente/${documento}`)
+            .set(bearer(token))
+            .expect(200);
+
+        expect(got.body.data.cel).toBeNull();
+        expect(got.body.data.email).toBeNull();
+        expect(got.body.data.obs).toBeNull();
+    });
+
     it("altera o dono do veículo na edição", async () => {
         const oficina = await cadastrarOficina(app);
         const token = oficina.token as string;
