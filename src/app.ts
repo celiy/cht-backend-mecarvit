@@ -10,6 +10,38 @@ import { notFound } from "./middlewares/notFound.js";
 import { globalErrorHandler } from "./middlewares/errorHandler.js";
 import { apiRouter } from "./routes/index.js";
 
+const LOOPBACK_HOSTNAMES = ["localhost", "127.0.0.1", "[::1]"];
+
+/**
+ * `localhost` and `127.0.0.1` are distinct origins for the browser, so every
+ * loopback entry also allows its aliases (desktop app loads `127.0.0.1`).
+ */
+function expandLoopbackOrigins(origins: string[]): string[] {
+    const expanded = new Set<string>();
+
+    for (const origin of origins) {
+        expanded.add(origin);
+
+        let url: URL;
+
+        try {
+            url = new URL(origin);
+        } catch {
+            continue;
+        }
+
+        if (!LOOPBACK_HOSTNAMES.includes(url.hostname)) {
+            continue;
+        }
+
+        for (const hostname of LOOPBACK_HOSTNAMES) {
+            expanded.add(`${url.protocol}//${hostname}${url.port ? `:${url.port}` : ""}`);
+        }
+    }
+
+    return [...expanded];
+}
+
 export function createApp(): Express {
     const app = express();
 
@@ -21,8 +53,9 @@ export function createApp(): Express {
     app.use(express.urlencoded({ extended: true, limit: "1mb" }));
     app.use(hpp());
 
+    const corsOrigins = expandLoopbackOrigins(env.corsOrigins);
     const corsOptions: CorsOptions = {
-        origin: env.corsOrigins.length > 0 ? env.corsOrigins : true,
+        origin: corsOrigins.length > 0 ? corsOrigins : true,
         credentials: true,
     };
     app.use(cors(corsOptions));
