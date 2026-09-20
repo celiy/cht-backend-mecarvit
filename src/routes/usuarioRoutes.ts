@@ -11,7 +11,10 @@ usuarioRouter.route("/")
 
 usuarioRouter.post("/:cpf/senha", usuarioController.changeSenha);
 
+// `updateUsuario` owns the `/:cpf` authorization: it accepts self-edits and
+// requires FUNCIONARIOS to touch somebody else. A route-level guard here would
+// block every employee from saving their own profile.
 usuarioRouter.route("/:cpf")
     .get(usuarioController.getUsuario)
-    .put(requireAccess(ACCESS.FUNCIONARIOS), usuarioController.updateUsuario)
-    .patch(requireAccess(ACCESS.FUNCIONARIOS), usuarioController.updateUsuario);
+    .put(usuarioController.updateUsuario)
+    .patch(usuarioController.updateUsuario);

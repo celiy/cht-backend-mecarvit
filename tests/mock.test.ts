@@ -2,10 +2,11 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import request from "supertest";
 import { createApp } from "../src/app.js";
-import { openCompany } from "../src/config/database.js";
+import { empresaExists, openCompany } from "../src/config/database.js";
 import { MOCK_COMPANY_NAME, MOCK_LOGIN } from "../src/db/mock/constants.js";
 import { clearAllMockData } from "../src/db/mock/clear.js";
 import { populateMock } from "../src/db/mock/seed.js";
+import { resetMockData } from "../src/db/reset.js";
 import { clientes, empresas, usuarios } from "../src/db/schema/index.js";
 import { cadastrarOficina, SENHA } from "./helpers.js";
 
@@ -64,5 +65,39 @@ describe("dados mock", () => {
             .post("/api/login")
             .send({ email: "gestor.real@oficina.test", senha: SENHA, empresaId: real.empresaId })
             .expect(200);
+    });
+
+    it("db:reset remove a oficina mock e preserva a oficina real", async () => {
+        const real = await cadastrarOficina(app, {
+            empresaNome: "Oficina do Gestor",
+            nome: "Gestor Preservado",
+            email: "gestor.preservado@oficina.test",
+            senha: SENHA
+        });
+        const seeded = await populateMock();
+
+        const result = await resetMockData();
+
+        expect(result.removedCompanyIds).toContain(seeded.empresaId);
+        expect(empresaExists(real.empresaId as number)).toBe(true);
+        expect(empresaExists(seeded.empresaId)).toBe(false);
+
+        await request(app)
+            .post("/api/login")
+            .send({
+                email: "gestor.preservado@oficina.test",
+                senha: SENHA,
+                empresaId: real.empresaId
+            })
+            .expect(200);
+
+        await request(app)
+            .post("/api/login")
+            .send({
+                email: MOCK_LOGIN.email,
+                senha: MOCK_LOGIN.senha,
+                empresaId: seeded.empresaId
+            })
+            .expect(404);
     });
 });

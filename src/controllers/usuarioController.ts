@@ -85,6 +85,35 @@ export const createUsuario = catchAsync(async (req: Request, res: Response) => {
     res.status(201).json({ data: created });
 });
 
+/**
+ * Fields nobody may change on their own account.
+ *
+ * Editing your own cargo would let any employee grant themselves a broader one,
+ * and `ativo` / `senhaInicial` bypass the manager controls. The request is
+ * rejected instead of silently ignored so the caller learns nothing changed.
+ */
+function assertSelfEditableFields(isSelf: boolean, body: Record<string, unknown>): void {
+    if (!isSelf) {
+        return;
+    }
+
+    const blocked = ["cargoId", "ativo", "senhaInicial"].filter(
+        (field) => body[field] !== undefined
+    );
+
+    if (blocked.length === 0) {
+        return;
+    }
+
+    throw new AppError(
+        "Alteração não permitida no próprio usuário",
+        409,
+        Object.fromEntries(
+            blocked.map((field) => [field, "Você não pode alterar este campo na própria conta"])
+        )
+    );
+}
+
 export const updateUsuario = catchAsync(async (req: Request, res: Response) => {
     const db = requireDb(req);
     const actor = requireUser(req);
@@ -111,18 +140,15 @@ export const updateUsuario = catchAsync(async (req: Request, res: Response) => {
     }
 
     throwIfInvalid(validateUpdateUsuario(body));
+    assertSelfEditableFields(isSelf, body);
 
     const updated = await usuarioService.updateUsuario(db, targetCpf, {
         nome: body.nome as string | undefined,
         email: body.email as string | undefined,
         senha: body.senha as string | undefined,
-        cargoId: isSelf
-            ? undefined
-            : body.cargoId === undefined
-              ? undefined
-              : Number(body.cargoId),
-        ativo: isSelf ? undefined : (body.ativo as boolean | undefined),
-        senhaInicial: isSelf ? undefined : (body.senhaInicial as boolean | undefined)
+        cargoId: body.cargoId === undefined ? undefined : Number(body.cargoId),
+        ativo: body.ativo as boolean | undefined,
+        senhaInicial: body.senhaInicial as boolean | undefined
     });
 
     res.status(200).json({ data: updated });

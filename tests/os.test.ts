@@ -393,4 +393,24 @@ describe("ordem de serviço, financeiro e dashboard", () => {
             .set(bearer(ctx.token))
             .expect(409);
     });
+
+    it("aceita duas linhas do mesmo serviço na mesma OS", async () => {
+        const ctx = await seedOperacao();
+
+        const created = await request(app)
+            .post("/api/ordem-servico")
+            .set(bearer(ctx.token))
+            .send({
+                clienteDocumento: ctx.documento,
+                veiculoId: ctx.veiculoId,
+                itens: [
+                    { servicoId: ctx.servicoId, quantidade: 1, valorObra: 100, valorPecas: 0 },
+                    { servicoId: ctx.servicoId, quantidade: 2, valorObra: 50, valorPecas: 20 }
+                ]
+            })
+            .expect(201);
+
+        expect(created.body.data.itens).toHaveLength(2);
+        expect(created.body.data.total).toBe(240);
+    });
 });

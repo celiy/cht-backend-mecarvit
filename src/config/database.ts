@@ -13,6 +13,7 @@ export type AppDatabase = BetterSQLite3Database<typeof schema>;
 type PoolEntry = {
     sqlite: Database.Database;
     db: AppDatabase;
+    ino: number;
 };
 
 const pool = new Map<number, PoolEntry>();
@@ -85,16 +86,29 @@ export async function seedCompany(db: AppDatabase, empresaId: number, nome: stri
     }
 }
 
+function sqliteIno(filePath: string): number | null {
+    try {
+        return fs.statSync(filePath).ino;
+    } catch {
+        return null;
+    }
+}
+
 export function openCompany(empresaId: number): AppDatabase {
+    const filePath = empresaFilePath(empresaId);
+    const ino = sqliteIno(filePath);
     const cached = pool.get(empresaId);
 
     if (cached) {
-        return cached.db;
+        if (ino != null && cached.ino === ino) {
+            applyMigrations(cached.db);
+            return cached.db;
+        }
+
+        closeCompany(empresaId);
     }
 
-    const filePath = empresaFilePath(empresaId);
-
-    if (!fs.existsSync(filePath)) {
+    if (ino == null) {
         throw new Error(`Empresa ${empresaId} não encontrada`);
     }
 
@@ -102,7 +116,7 @@ export function openCompany(empresaId: number): AppDatabase {
     const db = drizzle(sqlite, { schema });
 
     applyMigrations(db);
-    pool.set(empresaId, { sqlite, db });
+    pool.set(empresaId, { sqlite, db, ino });
 
     return db;
 }
@@ -141,7 +155,7 @@ export async function createCompanyDatabase(nome: string): Promise<{ empresaId: 
 
     applyMigrations(db);
     await seedCompany(db, empresaId, nome);
-    pool.set(empresaId, { sqlite, db });
+    pool.set(empresaId, { sqlite, db, ino: sqliteIno(filePath) ?? 0 });
 
     return { empresaId, db };
 }

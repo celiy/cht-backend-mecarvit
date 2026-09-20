@@ -280,10 +280,21 @@ async function findMockCompany(): Promise<{ empresaId: number; db: AppDatabase }
 }
 
 export async function populateMock(): Promise<{ empresaId: number; created: boolean }> {
-    const existing = await findMockCompany();
+    let existing = await findMockCompany();
     let empresaId: number;
     let db: AppDatabase;
     let created = false;
+
+    if (existing) {
+        const realUsers = await existing.db
+            .select({ cpf: usuarios.cpf })
+            .from(usuarios)
+            .where(eq(usuarios.mock, false));
+
+        if (realUsers.length > 0) {
+            existing = null;
+        }
+    }
 
     if (existing) {
         empresaId = existing.empresaId;

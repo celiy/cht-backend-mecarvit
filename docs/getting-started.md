@@ -46,4 +46,6 @@ npm run db:mock:clear
 
 Apaga registros com `mock = true` em todas as empresas locais. Não mexe em cadastros reais (`mock = false`). A empresa mock continua no disco; rode `npm run db:mock` para popular de novo.
 
-Para apagar **todos** os SQLite (mock e real): `npm run db:reset`.
+`npm run db:reset` remove **só o mock**: apaga a oficina mock do disco e limpa linhas mock em oficinas reais. Cadastros reais (como um gestor criado na tela de cadastro) permanecem.
+
+Para apagar **todos** os SQLite (mock e real): `FORCE_RESET_ALL=1 npm run db:reset`.

@@ -149,24 +149,19 @@ export const ordensServico = sqliteTable("ordem_servico", {
     ...mockFlag()
 });
 
-export const itensServico = sqliteTable(
-    "item_servico",
-    {
-        quantidade: integer("quantidade").notNull(),
-        valorPecas: real("valor_pecas"),
-        valorObra: real("valor_obra").notNull(),
-        ordemServicoId: integer("ordem_servico_id")
-            .notNull()
-            .references(() => ordensServico.id, { onDelete: "cascade" }),
-        servicoId: integer("servico_id")
-            .notNull()
-            .references(() => servicos.id),
-        ...mockFlag()
-    },
-    (table) => ({
-        pk: primaryKey({ columns: [table.ordemServicoId, table.servicoId] })
-    })
-);
+export const itensServico = sqliteTable("item_servico", {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    quantidade: integer("quantidade").notNull(),
+    valorPecas: real("valor_pecas"),
+    valorObra: real("valor_obra").notNull(),
+    ordemServicoId: integer("ordem_servico_id")
+        .notNull()
+        .references(() => ordensServico.id, { onDelete: "cascade" }),
+    servicoId: integer("servico_id")
+        .notNull()
+        .references(() => servicos.id),
+    ...mockFlag()
+});
 
 export const responsaveis = sqliteTable(
     "responsavel",
