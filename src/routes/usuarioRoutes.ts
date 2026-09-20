@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as usuarioController from "../controllers/usuarioController.js";
 import { requireAccess } from "../middlewares/requireAccess.js";
-import { ACCESS } from "../db/schema/tables.js";
+import { ACCESS } from "@shared/mecarvit/access";
 
 export const usuarioRouter = Router();
 

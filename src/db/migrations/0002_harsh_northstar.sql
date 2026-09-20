@@ -1,0 +1,1 @@
+ALTER TABLE `ordem_servico` ADD `data_limite_pagamento` integer;

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as cargoController from "../controllers/cargoController.js";
 import { requireAccess } from "../middlewares/requireAccess.js";
-import { ACCESS } from "../db/schema/tables.js";
+import { ACCESS } from "@shared/mecarvit/access";
 
 export const cargoRouter = Router();
 

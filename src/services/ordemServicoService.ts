@@ -255,7 +255,15 @@ async function syncFinanceiro(
     let resId = os.regEntradaSaidaId;
 
     if (!resId) {
-        const inserted = await db.insert(registrosEntradaSaida).values(payload).returning();
+        // The deadline seeds the new record only. Once it exists, the record
+        // owns the value: editing it later must survive OS updates.
+        const inserted = await db
+            .insert(registrosEntradaSaida)
+            .values({
+                ...payload,
+                dataLimitePagamento: os.dataLimitePagamento ?? null
+            })
+            .returning();
         const created = inserted[0];
 
         if (!created) {
@@ -271,6 +279,35 @@ async function syncFinanceiro(
     if (options.pagamentos) {
         await replacePagamentos(db, resId, nextPagamentos);
     }
+}
+
+/**
+ * Mirrors the OS deadline onto the record it generated, so the field keeps
+ * working after that record exists.
+ *
+ * Only called when the request actually carries the value, so a stale copy on
+ * the OS never overwrites an edit made from the financeiro.
+ */
+async function syncRegistroDataLimite(
+    db: AppDatabase,
+    osId: number,
+    value: Date | string | null
+): Promise<void> {
+    const rows = await db
+        .select({ regEntradaSaidaId: ordensServico.regEntradaSaidaId })
+        .from(ordensServico)
+        .where(eq(ordensServico.id, osId))
+        .limit(1);
+    const resId = rows[0]?.regEntradaSaidaId;
+
+    if (!resId) {
+        return;
+    }
+
+    await db
+        .update(registrosEntradaSaida)
+        .set({ dataLimitePagamento: value ? new Date(value) : null })
+        .where(eq(registrosEntradaSaida.id, resId));
 }
 
 export async function getOrdemServico(db: AppDatabase, id: number) {
@@ -346,6 +383,7 @@ export async function createOrdemServico(
         obs?: string | null;
         dataInicio?: Date | string | null;
         dataConclusao?: Date | string | null;
+        dataLimitePagamento?: Date | string | null;
         itens?: ItemInputDto[];
         responsaveis?: string[];
         pagamentos?: PagamentoInput[];
@@ -376,7 +414,8 @@ export async function createOrdemServico(
                 ? (dto.dataConclusao ? new Date(dto.dataConclusao) : new Date())
                 : dto.dataConclusao
                     ? new Date(dto.dataConclusao)
-                    : null
+                    : null,
+            dataLimitePagamento: dto.dataLimitePagamento ? new Date(dto.dataLimitePagamento) : null
         })
         .returning();
     const os = inserted[0];
@@ -413,6 +452,7 @@ export async function updateOrdemServico(
         obs?: string | null;
         dataInicio?: Date | string | null;
         dataConclusao?: Date | string | null;
+        dataLimitePagamento?: Date | string | null;
         itens?: ItemInputDto[];
         responsaveis?: string[];
         pagamentos?: PagamentoInput[];
@@ -476,6 +516,12 @@ export async function updateOrdemServico(
         patch.dataInicio = dto.dataInicio ? new Date(dto.dataInicio) : null;
     }
 
+    if (dto.dataLimitePagamento !== undefined) {
+        patch.dataLimitePagamento = dto.dataLimitePagamento
+            ? new Date(dto.dataLimitePagamento)
+            : null;
+    }
+
     if (Object.keys(patch).length > 0) {
         await db.update(ordensServico).set(patch).where(eq(ordensServico.id, id));
     }
@@ -492,6 +538,10 @@ export async function updateOrdemServico(
         pagamentos: dto.pagamentos,
         replacePagamentos: Boolean(dto.replaceNested && dto.pagamentos !== undefined)
     });
+
+    if (dto.dataLimitePagamento !== undefined) {
+        await syncRegistroDataLimite(db, id, dto.dataLimitePagamento);
+    }
 
     return getOrdemServico(db, id);
 }

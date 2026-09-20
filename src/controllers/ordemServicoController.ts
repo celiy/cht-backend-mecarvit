@@ -4,10 +4,11 @@ import { catchAsync } from "../utils/catchAsync.js";
 import { ApiFeatures } from "../utils/ApiFeatures.js";
 import { parseId, requireDb, requireUser } from "../utils/http.js";
 import { throwIfInvalid, bodyOf } from "../utils/validate.js";
-import { clientes, ordensServico, statusOs, veiculos } from "../db/schema/index.js";
+import { clientes, ordensServico, registrosEntradaSaida, statusOs, veiculos } from "../db/schema/index.js";
 import * as ordemServicoService from "../services/ordemServicoService.js";
 import { asItens, asPagamentos, asResponsaveis, bodyOptionalString, isPagamentosOnlyBody } from "../utils/nested.js";
-import { eq, inArray, like, or, sql } from "drizzle-orm";
+import { eq, inArray, isNull, like, or, sql, and, gte, lte, type SQL } from "drizzle-orm";
+import { utcDayRange } from "../utils/utcDayRange.js";
 
 export const listStatusOs = catchAsync(async (req: Request, res: Response) => {
     const db = requireDb(req);
@@ -47,10 +48,12 @@ export const listOrdens = catchAsync(async (req: Request, res: Response) => {
     const clienteFilter = queryStringValue(query, "cliente")?.trim();
     const veiculoFilter = queryStringValue(query, "veiculo")?.trim();
     const pagaFilter = queryStringValue(query, "paga")?.trim().toLowerCase();
+    const dataLimiteRaw = queryStringValue(query, "dataLimitePagamento")?.trim();
 
     delete query.cliente;
     delete query.veiculo;
     delete query.paga;
+    delete query.dataLimitePagamento;
 
     const features = new ApiFeatures(db, ordensServico, query)
         .filter()
@@ -149,6 +152,35 @@ export const listOrdens = catchAsync(async (req: Request, res: Response) => {
         features.whereExtra(inArray(ordensServico.id, target));
     }
 
+    if (dataLimiteRaw) {
+        const { start, end } = utcDayRange(dataLimiteRaw);
+        const matched = await db
+            .select({ id: registrosEntradaSaida.id })
+            .from(registrosEntradaSaida)
+            .where(
+                and(
+                    gte(registrosEntradaSaida.dataLimitePagamento, start),
+                    lte(registrosEntradaSaida.dataLimitePagamento, end)
+                ) as SQL
+            );
+        const registroIds = matched.map((row) => row.id);
+
+        // Mirrors `osDataLimitePagamento` on the client: while the OS has no
+        // record yet, its own column holds the deadline; once the record
+        // exists, only the record counts.
+        const pendingMatch = and(
+            isNull(ordensServico.regEntradaSaidaId),
+            gte(ordensServico.dataLimitePagamento, start),
+            lte(ordensServico.dataLimitePagamento, end)
+        ) as SQL;
+
+        features.whereExtra(
+            registroIds.length > 0
+                ? (or(pendingMatch, inArray(ordensServico.regEntradaSaidaId, registroIds)) as SQL)
+                : pendingMatch
+        );
+    }
+
     const rows = await features.exec();
     const total = await features.count();
     const data = [];
@@ -185,6 +217,7 @@ export const createOs = catchAsync(async (req: Request, res: Response) => {
         obs: bodyOptionalString(body, "obs", "observacao"),
         dataInicio: bodyOptionalString(body, "dataInicio"),
         dataConclusao: bodyOptionalString(body, "dataConclusao"),
+        dataLimitePagamento: bodyOptionalString(body, "dataLimitePagamento"),
         itens: asItens(body.itens),
         responsaveis: asResponsaveis(body.responsaveis),
         pagamentos: asPagamentos(body.pagamentos),
@@ -216,6 +249,7 @@ export const updateOs = catchAsync(async (req: Request, res: Response) => {
             obs: bodyOptionalString(body, "obs", "observacao"),
             dataInicio: bodyOptionalString(body, "dataInicio"),
             dataConclusao: bodyOptionalString(body, "dataConclusao"),
+            dataLimitePagamento: bodyOptionalString(body, "dataLimitePagamento"),
             itens: asItens(body.itens),
             responsaveis: asResponsaveis(body.responsaveis),
             pagamentos: asPagamentos(body.pagamentos),

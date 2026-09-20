@@ -6,7 +6,7 @@ import { ApiFeatures } from "../utils/ApiFeatures.js";
 import { defaultAtivoQuery, requireDb, requireUser } from "../utils/http.js";
 import { throwIfInvalid, bodyOf } from "../utils/validate.js";
 import { usuarios } from "../db/schema/index.js";
-import { ACCESS } from "../db/schema/tables.js";
+import { ACCESS } from "@shared/mecarvit/access";
 import * as usuarioService from "../services/usuarioService.js";
 import { hasAccess, isSuperadmin } from "../utils/access.js";
 import { ne } from "drizzle-orm";
@@ -121,7 +121,8 @@ export const updateUsuario = catchAsync(async (req: Request, res: Response) => {
             : body.cargoId === undefined
               ? undefined
               : Number(body.cargoId),
-        ativo: isSelf ? undefined : (body.ativo as boolean | undefined)
+        ativo: isSelf ? undefined : (body.ativo as boolean | undefined),
+        senhaInicial: isSelf ? undefined : (body.senhaInicial as boolean | undefined)
     });
 
     res.status(200).json({ data: updated });

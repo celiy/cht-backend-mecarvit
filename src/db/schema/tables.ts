@@ -124,6 +124,12 @@ export const ordensServico = sqliteTable("ordem_servico", {
     id: integer("id").primaryKey({ autoIncrement: true }),
     dataInicio: integer("data_inicio", { mode: "timestamp" }),
     dataConclusao: integer("data_conclusao", { mode: "timestamp" }),
+    /**
+     * Deadline agreed with the customer for the receivable this OS generates.
+     * It seeds `registro_entrada_saida.data_limite_pagamento` when that record
+     * is created; from then on the record owns the value.
+     */
+    dataLimitePagamento: integer("data_limite_pagamento", { mode: "timestamp" }),
     diagnosticoCliente: text("diagnostico_cliente"),
     diagnosticoMecanico: text("diagnostico_mecanico"),
     obs: text("obs"),
@@ -204,13 +210,3 @@ export const STATUS_OS_NOMES = [
     "concluída",
     "cancelada"
 ] as const;
-
-export const ACCESS = {
-    PONTO: "1",
-    CLIENTES: "2",
-    VEICULOS: "3",
-    OS: "4",
-    FUNCIONARIOS: "5",
-    TERMINAL: "6",
-    SUPERADMIN: "0"
-} as const;
