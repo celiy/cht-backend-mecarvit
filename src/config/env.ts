@@ -11,7 +11,12 @@ function required(name: string, fallback?: string): string {
 }
 
 function parsePort(value: string | undefined, fallback: number): number {
+    if (value === "0") {
+        return 0;
+    }
+
     const parsed = Number(value);
+
     return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
@@ -28,6 +33,7 @@ export const env = {
     isProduction: process.env.NODE_ENV === "production",
     host: process.env.HOST ?? "127.0.0.1",
     port: parsePort(process.env.PORT, 3001),
+    portScanLimit: parsePort(process.env.PORT_SCAN_LIMIT, 20),
     dbPath: process.env.DB_PATH ?? "./data/mecarvit.sqlite",
     empresasDir: process.env.EMPRESAS_DIR ?? "./data/empresas",
     jwt: {
