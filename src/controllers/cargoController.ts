@@ -6,6 +6,7 @@ import { parseId, requireDb } from "../utils/http.js";
 import { throwIfInvalid, bodyOf } from "../utils/validate.js";
 import { cargos } from "../db/schema/index.js";
 import * as cargoService from "../services/cargoService.js";
+import { notifyStaffCadastro } from "../realtime/mecarvitRealtime.js";
 
 export const listCargos = catchAsync(async (req: Request, res: Response) => {
     const db = requireDb(req);
@@ -41,6 +42,7 @@ export const createCargo = catchAsync(async (req: Request, res: Response) => {
         nivelAcesso: String(body.nivelAcesso)
     });
 
+    notifyStaffCadastro(req, "cargo");
     res.status(201).json({ data: created });
 });
 

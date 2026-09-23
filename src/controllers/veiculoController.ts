@@ -6,6 +6,7 @@ import { parseId, requireDb } from "../utils/http.js";
 import { throwIfInvalid, bodyOf } from "../utils/validate.js";
 import { veiculos } from "../db/schema/index.js";
 import * as veiculoService from "../services/veiculoService.js";
+import { notifyStaffCadastro } from "../realtime/mecarvitRealtime.js";
 
 function parseKilometragemBody(value: unknown): number | null | undefined {
     if (value === undefined) {
@@ -58,6 +59,7 @@ export const createVeiculo = catchAsync(async (req: Request, res: Response) => {
         chassi: body.chassi as string | undefined
     });
 
+    notifyStaffCadastro(req, "veiculo");
     res.status(201).json({ data: created });
 });
 

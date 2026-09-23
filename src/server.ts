@@ -4,6 +4,7 @@ import { createApp } from "./app.js";
 import { closeAllCompanies, runMigrations } from "./config/database.js";
 import { startRepl } from "./repl/index.js";
 import { listenOnAvailablePort } from "./utils/findListenPort.js";
+import { attachMecarvitRealtime } from "./realtime/mecarvitRealtime.js";
 
 process.on("uncaughtException", (err) => {
     console.error("UNCAUGHT EXCEPTION:", err);
@@ -16,6 +17,7 @@ runMigrations();
 
 const app = createApp();
 const httpServer: Server = http.createServer(app);
+const realtime = attachMecarvitRealtime(httpServer);
 const { port } = await listenOnAvailablePort(httpServer, env.port, env.host, env.portScanLimit);
 const apiBaseUrl = `http://${env.host}:${port}`;
 
@@ -26,6 +28,7 @@ startRepl(app);
 function shutdown(signal: string, code: number): void {
     console.log(`Received ${signal}, shutting down...`);
     httpServer.close(() => {
+        realtime.close();
         closeAllCompanies();
         process.exit(code);
     });

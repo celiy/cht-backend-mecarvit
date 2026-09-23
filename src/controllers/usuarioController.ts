@@ -9,6 +9,7 @@ import { usuarios } from "../db/schema/index.js";
 import { ACCESS } from "@shared/mecarvit/access";
 import * as usuarioService from "../services/usuarioService.js";
 import { hasAccess, isSuperadmin } from "../utils/access.js";
+import { notifyStaffCadastro } from "../realtime/mecarvitRealtime.js";
 import { ne } from "drizzle-orm";
 
 export const listUsuarios = catchAsync(async (req: Request, res: Response) => {
@@ -82,6 +83,7 @@ export const createUsuario = catchAsync(async (req: Request, res: Response) => {
         ativo: body.ativo === undefined ? true : Boolean(body.ativo)
     });
 
+    notifyStaffCadastro(req, "usuario");
     res.status(201).json({ data: created });
 });
 

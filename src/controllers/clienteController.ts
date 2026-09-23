@@ -7,6 +7,7 @@ import { throwIfInvalid, bodyOf } from "../utils/validate.js";
 import { clientes } from "../db/schema/index.js";
 import * as clienteService from "../services/clienteService.js";
 import { asEnderecoIds, asEnderecos, asVeiculos, bodyOptionalPhone, bodyOptionalString } from "../utils/nested.js";
+import { notifyStaffCadastro } from "../realtime/mecarvitRealtime.js";
 
 export const listClientes = catchAsync(async (req: Request, res: Response) => {
     const db = requireDb(req);
@@ -59,6 +60,7 @@ export const createCliente = catchAsync(async (req: Request, res: Response) => {
         veiculos: asVeiculos(body.veiculos)
     });
 
+    notifyStaffCadastro(req, "cliente");
     res.status(201).json({ data: created });
 });
 

@@ -6,6 +6,7 @@ import { parseId, requireDb } from "../utils/http.js";
 import { throwIfInvalid, bodyOf } from "../utils/validate.js";
 import { enderecos } from "../db/schema/index.js";
 import * as enderecoService from "../services/enderecoService.js";
+import { notifyStaffCadastro } from "../realtime/mecarvitRealtime.js";
 
 export const listEnderecos = catchAsync(async (req: Request, res: Response) => {
     const db = requireDb(req);
@@ -50,6 +51,7 @@ export const createEndereco = catchAsync(async (req: Request, res: Response) => 
         complemento: String(body.complemento ?? "")
     });
 
+    notifyStaffCadastro(req, "endereco");
     res.status(201).json({ data: created });
 });
 

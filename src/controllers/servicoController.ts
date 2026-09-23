@@ -6,6 +6,7 @@ import { parseId, requireDb } from "../utils/http.js";
 import { throwIfInvalid, bodyOf } from "../utils/validate.js";
 import { servicos } from "../db/schema/index.js";
 import * as servicoService from "../services/servicoService.js";
+import { notifyStaffCadastro } from "../realtime/mecarvitRealtime.js";
 
 export const listServicos = catchAsync(async (req: Request, res: Response) => {
     const db = requireDb(req);
@@ -40,6 +41,7 @@ export const createServico = catchAsync(async (req: Request, res: Response) => {
         nome: String(body.nome)
     });
 
+    notifyStaffCadastro(req, "servico");
     res.status(201).json({ data: created });
 });
 
