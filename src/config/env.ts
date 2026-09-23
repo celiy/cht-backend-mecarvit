@@ -11,12 +11,17 @@ export function resolveJwtSecret(
     nodeEnv: string = process.env.NODE_ENV ?? "development"
 ): string {
     const trimmed = secret?.trim() ?? "";
+    const isProduction = nodeEnv === "production";
 
     if (!trimmed) {
-        throw new Error("Variável de ambiente obrigatória ausente: JWT_SECRET");
+        if (isProduction) {
+            throw new Error("Variável de ambiente obrigatória ausente: JWT_SECRET");
+        }
+
+        return JWT_SECRET_PLACEHOLDER;
     }
 
-    if (nodeEnv === "production" && trimmed === JWT_SECRET_PLACEHOLDER) {
+    if (isProduction && trimmed === JWT_SECRET_PLACEHOLDER) {
         throw new Error(
             "JWT_SECRET em produção não pode ser o valor de exemplo. Defina um segredo único."
         );

@@ -2,10 +2,15 @@ import { describe, expect, it } from "vitest";
 import { JWT_SECRET_PLACEHOLDER, resolveJwtSecret } from "../src/config/env.js";
 
 describe("resolveJwtSecret", () => {
-    it("exige JWT_SECRET", () => {
-        expect(() => resolveJwtSecret(undefined, "development")).toThrow(/JWT_SECRET/);
-        expect(() => resolveJwtSecret("", "development")).toThrow(/JWT_SECRET/);
+    it("exige JWT_SECRET em produção", () => {
+        expect(() => resolveJwtSecret(undefined, "production")).toThrow(/JWT_SECRET/);
+        expect(() => resolveJwtSecret("", "production")).toThrow(/JWT_SECRET/);
         expect(() => resolveJwtSecret("   ", "production")).toThrow(/JWT_SECRET/);
+    });
+
+    it("usa o placeholder em desenvolvimento quando JWT_SECRET está ausente", () => {
+        expect(resolveJwtSecret(undefined, "development")).toBe(JWT_SECRET_PLACEHOLDER);
+        expect(resolveJwtSecret("", "development")).toBe(JWT_SECRET_PLACEHOLDER);
     });
 
     it("recusa o placeholder em produção", () => {
