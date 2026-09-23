@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
     addModalToQuery,
     parseModalQueryParam,
@@ -6,7 +6,9 @@ import {
     releaseModalUrlInstance,
     removeModalFromQuery,
     resetModalUrlIdAllocator,
-    serializeModalQueryParam
+    scheduleModalUrlQuerySync,
+    serializeModalQueryParam,
+    trackModalUrlOpenState
 } from "@shared/frontend/modalQuery";
 
 describe("parseModalQueryParam", () => {
@@ -57,5 +59,37 @@ describe("addModalToQuery / removeModalFromQuery", () => {
         expect(addModalToQuery([1], 2)).toEqual([1, 2]);
         expect(addModalToQuery([1, 2], 2)).toEqual([1, 2]);
         expect(removeModalFromQuery([1, 2], 1)).toEqual([2]);
+    });
+});
+
+describe("scheduleModalUrlQuerySync", () => {
+    it("batches simultaneous opens into one push", async () => {
+        resetModalUrlIdAllocator(1);
+        const query: Record<string, unknown> = {};
+        const router = {
+            push: vi.fn(async (to: { query: Record<string, unknown> }) => {
+                Object.assign(query, to.query);
+            }),
+            replace: vi.fn(async (to: { query: Record<string, unknown> }) => {
+                Object.assign(query, to.query);
+            }),
+            currentRoute: {
+                value: {
+                    get query() {
+                        return query;
+                    }
+                }
+            }
+        };
+
+        trackModalUrlOpenState(1, true);
+        trackModalUrlOpenState(2, true);
+        scheduleModalUrlQuerySync(router);
+        scheduleModalUrlQuerySync(router);
+
+        await new Promise((resolve) => queueMicrotask(resolve));
+
+        expect(router.push).toHaveBeenCalledTimes(1);
+        expect(query.modal).toBe("[1,2]");
     });
 });
