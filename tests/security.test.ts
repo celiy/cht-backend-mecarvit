@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import request from "supertest";
 import { createApp } from "../src/app.js";
@@ -86,5 +88,19 @@ describe("segurança das rotas", () => {
             .get("/api/cliente")
             .set(bearer(login.body.data.token))
             .expect(403);
+    });
+
+    it("não expõe ficheiros SQLite em /data", async () => {
+        const probeRel = path.join("empresas", "cht-static-probe.sqlite");
+        const probeAbs = path.resolve("data", probeRel);
+
+        fs.mkdirSync(path.dirname(probeAbs), { recursive: true });
+        fs.writeFileSync(probeAbs, Buffer.from("SQLite format 3\0probe"));
+
+        try {
+            await request(app).get(`/data/${probeRel.replaceAll("\\", "/")}`).expect(404);
+        } finally {
+            fs.rmSync(probeAbs, { force: true });
+        }
     });
 });

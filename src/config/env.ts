@@ -1,13 +1,28 @@
 import "dotenv/config";
 
-function required(name: string, fallback?: string): string {
-    const value = process.env[name] ?? fallback;
+export const JWT_SECRET_PLACEHOLDER = "change-me-please";
 
-    if (value === undefined || value === "") {
-        throw new Error(`Variável de ambiente obrigatória ausente: ${name}`);
+/**
+ * Production must set a unique secret. The example placeholder is only
+ * allowed in local/dev so a missing env var cannot mint forgeable tokens.
+ */
+export function resolveJwtSecret(
+    secret: string | undefined,
+    nodeEnv: string = process.env.NODE_ENV ?? "development"
+): string {
+    const trimmed = secret?.trim() ?? "";
+
+    if (!trimmed) {
+        throw new Error("Variável de ambiente obrigatória ausente: JWT_SECRET");
     }
 
-    return value;
+    if (nodeEnv === "production" && trimmed === JWT_SECRET_PLACEHOLDER) {
+        throw new Error(
+            "JWT_SECRET em produção não pode ser o valor de exemplo. Defina um segredo único."
+        );
+    }
+
+    return trimmed;
 }
 
 function parsePort(value: string | undefined, fallback: number): number {
@@ -37,7 +52,7 @@ export const env = {
     dbPath: process.env.DB_PATH ?? "./data/mecarvit.sqlite",
     empresasDir: process.env.EMPRESAS_DIR ?? "./data/empresas",
     jwt: {
-        secret: required("JWT_SECRET", "change-me-please"),
+        secret: resolveJwtSecret(process.env.JWT_SECRET),
         expiresIn: process.env.JWT_EXPIRES_IN ?? "7d"
     },
     corsOrigins: parseList(process.env.CORS_ORIGINS) ?? []

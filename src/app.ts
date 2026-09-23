@@ -64,7 +64,6 @@ export function createApp(): Express {
     app.use(sanitize);
 
     app.use(express.static("public"));
-    app.use("/data", express.static("data"));
 
     app.get("/ip", (req, res) => { res.send(req.ip); });
     app.get("/health", (_req, res) => { res.json({ status: "ok", at: new Date().toISOString() }); });
