@@ -3,43 +3,43 @@ import type { AppDatabase } from "../config/database.js";
 import { ordensServico, pagamentos, registrosEntradaSaida, statusOs } from "../db/schema/index.js";
 import { AppError } from "../utils/AppError.js";
 import { replacePagamentos, assertPagamentosDentroDoValor, type PagamentoInput } from "./pagamentoSync.js";
+import {
+    pagamentoSituacao,
+    type PagamentoSituacao
+} from "@shared/mecarvit/pagamentoSituacao";
 
-const PAYMENT_EPSILON = 0.009;
-
-function isRegistroFullyPaid(valorRegistro: number, pagamentoRows: Array<{ valor: number }>): boolean {
-    const paid = pagamentoRows.reduce((sum, row) => sum + Number(row.valor), 0);
-
-    return paid + PAYMENT_EPSILON >= Number(valorRegistro);
-}
-
-/** Registro ids fully paid (or not) by sum of pagamentos vs valor. */
-export async function listRegistroIdsByPagamento(
+/** Registro ids whose computed pagamentoSituacao matches `situacao`. */
+export async function listRegistroIdsByPagamentoSituacao(
     db: AppDatabase,
-    fullyPaid: boolean
+    situacao: PagamentoSituacao
 ): Promise<number[]> {
     const rows = await db
         .select({
             id: registrosEntradaSaida.id,
-            valor: registrosEntradaSaida.valor
+            valor: registrosEntradaSaida.valor,
+            dataLimitePagamento: registrosEntradaSaida.dataLimitePagamento
         })
         .from(registrosEntradaSaida);
-    const paid: number[] = [];
-    const unpaid: number[] = [];
+    const matched: number[] = [];
 
     for (const row of rows) {
         const pagamentoRows = await db
             .select()
             .from(pagamentos)
             .where(eq(pagamentos.regEntradaSaidaId, row.id));
+        const valorPago = pagamentoRows.reduce((sum, pagamento) => sum + Number(pagamento.valor), 0);
+        const current = pagamentoSituacao({
+            valor: row.valor,
+            valorPago,
+            dataLimitePagamento: row.dataLimitePagamento
+        });
 
-        if (isRegistroFullyPaid(row.valor, pagamentoRows)) {
-            paid.push(row.id);
-        } else {
-            unpaid.push(row.id);
+        if (current === situacao) {
+            matched.push(row.id);
         }
     }
 
-    return fullyPaid ? paid : unpaid;
+    return matched;
 }
 
 export async function getRegistro(db: AppDatabase, id: number) {

@@ -7,6 +7,7 @@ import { throwIfInvalid, bodyOf } from "../utils/validate.js";
 import { servicos } from "../db/schema/index.js";
 import * as servicoService from "../services/servicoService.js";
 import { notifyStaffCadastro } from "../realtime/mecarvitRealtime.js";
+import { recordAudit } from "../utils/audit.js";
 
 export const listServicos = catchAsync(async (req: Request, res: Response) => {
     const db = requireDb(req);
@@ -42,23 +43,49 @@ export const createServico = catchAsync(async (req: Request, res: Response) => {
     });
 
     notifyStaffCadastro(req, "servico");
+    recordAudit(req, {
+        action: "create",
+        entity: "servico",
+        entityId: String(created.id),
+        after: created
+    });
     res.status(201).json({ data: created });
 });
 
 export const updateServico = catchAsync(async (req: Request, res: Response) => {
     const body = bodyOf(req);
+    const db = requireDb(req);
+    const id = parseId(req.params.id);
 
     throwIfInvalid(validateServico(body, req.method === "PATCH"));
 
-    const updated = await servicoService.updateServico(requireDb(req), parseId(req.params.id), {
+    const before = await servicoService.getServico(db, id);
+    const updated = await servicoService.updateServico(db, id, {
         nome: body.nome as string | undefined
     });
 
+    recordAudit(req, {
+        action: "update",
+        entity: "servico",
+        entityId: String(id),
+        before,
+        after: updated
+    });
     res.status(200).json({ data: updated });
 });
 
 export const deleteServico = catchAsync(async (req: Request, res: Response) => {
-    await servicoService.deleteServico(requireDb(req), parseId(req.params.id));
+    const db = requireDb(req);
+    const id = parseId(req.params.id);
+    const before = await servicoService.getServico(db, id);
 
+    await servicoService.deleteServico(db, id);
+
+    recordAudit(req, {
+        action: "delete",
+        entity: "servico",
+        entityId: String(id),
+        before
+    });
     res.status(204).send();
 });

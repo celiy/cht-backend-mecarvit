@@ -7,6 +7,7 @@ import { throwIfInvalid, bodyOf } from "../utils/validate.js";
 import { veiculos } from "../db/schema/index.js";
 import * as veiculoService from "../services/veiculoService.js";
 import { notifyStaffCadastro } from "../realtime/mecarvitRealtime.js";
+import { recordAudit } from "../utils/audit.js";
 
 function parseKilometragemBody(value: unknown): number | null | undefined {
     if (value === undefined) {
@@ -60,15 +61,24 @@ export const createVeiculo = catchAsync(async (req: Request, res: Response) => {
     });
 
     notifyStaffCadastro(req, "veiculo");
+    recordAudit(req, {
+        action: "create",
+        entity: "veiculo",
+        entityId: String(created.id),
+        after: created
+    });
     res.status(201).json({ data: created });
 });
 
 export const updateVeiculo = catchAsync(async (req: Request, res: Response) => {
     const body = bodyOf(req);
+    const db = requireDb(req);
+    const id = parseId(req.params.id);
 
     throwIfInvalid(validateVeiculo(body, { partial: req.method === "PATCH", requireCliente: false }));
 
-    const updated = await veiculoService.updateVeiculo(requireDb(req), parseId(req.params.id), {
+    const before = await veiculoService.getVeiculo(db, id);
+    const updated = await veiculoService.updateVeiculo(db, id, {
         modelo: body.modelo as string | undefined,
         placa: body.placa as string | undefined,
         tipo: body.tipo as string | undefined,
@@ -79,11 +89,28 @@ export const updateVeiculo = catchAsync(async (req: Request, res: Response) => {
         clienteDocumento: body.clienteDocumento as string | undefined
     });
 
+    recordAudit(req, {
+        action: "update",
+        entity: "veiculo",
+        entityId: String(id),
+        before,
+        after: updated
+    });
     res.status(200).json({ data: updated });
 });
 
 export const deleteVeiculo = catchAsync(async (req: Request, res: Response) => {
-    await veiculoService.deleteVeiculo(requireDb(req), parseId(req.params.id));
+    const db = requireDb(req);
+    const id = parseId(req.params.id);
+    const before = await veiculoService.getVeiculo(db, id);
 
+    await veiculoService.deleteVeiculo(db, id);
+
+    recordAudit(req, {
+        action: "delete",
+        entity: "veiculo",
+        entityId: String(id),
+        before
+    });
     res.status(204).send();
 });

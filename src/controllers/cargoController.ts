@@ -7,6 +7,7 @@ import { throwIfInvalid, bodyOf } from "../utils/validate.js";
 import { cargos } from "../db/schema/index.js";
 import * as cargoService from "../services/cargoService.js";
 import { notifyStaffCadastro } from "../realtime/mecarvitRealtime.js";
+import { recordAudit } from "../utils/audit.js";
 
 export const listCargos = catchAsync(async (req: Request, res: Response) => {
     const db = requireDb(req);
@@ -43,17 +44,26 @@ export const createCargo = catchAsync(async (req: Request, res: Response) => {
     }, requireUser(req).nivelAcesso);
 
     notifyStaffCadastro(req, "cargo");
+    recordAudit(req, {
+        action: "create",
+        entity: "cargo",
+        entityId: String(created.id),
+        after: created
+    });
     res.status(201).json({ data: created });
 });
 
 export const updateCargo = catchAsync(async (req: Request, res: Response) => {
     const body = bodyOf(req);
+    const db = requireDb(req);
+    const id = parseId(req.params.id);
 
     throwIfInvalid(validateCargo(body, { partial: req.method === "PATCH", allowZero: false }));
 
+    const before = await cargoService.getCargo(db, id);
     const updated = await cargoService.updateCargo(
-        requireDb(req),
-        parseId(req.params.id),
+        db,
+        id,
         {
             nome: body.nome as string | undefined,
             nivelAcesso: body.nivelAcesso === undefined ? undefined : (body.nivelAcesso as string)
@@ -61,11 +71,28 @@ export const updateCargo = catchAsync(async (req: Request, res: Response) => {
         requireUser(req).nivelAcesso
     );
 
+    recordAudit(req, {
+        action: "update",
+        entity: "cargo",
+        entityId: String(id),
+        before,
+        after: updated
+    });
     res.status(200).json({ data: updated });
 });
 
 export const deleteCargo = catchAsync(async (req: Request, res: Response) => {
-    await cargoService.deleteCargo(requireDb(req), parseId(req.params.id), requireUser(req).nivelAcesso);
+    const db = requireDb(req);
+    const id = parseId(req.params.id);
+    const before = await cargoService.getCargo(db, id);
 
+    await cargoService.deleteCargo(db, id, requireUser(req).nivelAcesso);
+
+    recordAudit(req, {
+        action: "delete",
+        entity: "cargo",
+        entityId: String(id),
+        before
+    });
     res.status(204).send();
 });

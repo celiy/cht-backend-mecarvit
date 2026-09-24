@@ -284,6 +284,12 @@ export function removeCompanyFiles(empresaId: number): void {
             fs.rmSync(target, { force: true });
         }
     }
+
+    const logsDir = path.join(empresasDir(), String(empresaId));
+
+    if (fs.existsSync(logsDir)) {
+        fs.rmSync(logsDir, { recursive: true, force: true });
+    }
 }
 
 const SQLITE_FILE_PATTERN = /\.sqlite(?:-wal|-shm|-journal)?$/;

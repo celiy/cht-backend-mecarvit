@@ -10,6 +10,7 @@ import { ACCESS } from "@shared/mecarvit/access";
 import * as usuarioService from "../services/usuarioService.js";
 import { hasAccess, isGerente, isSuperadmin } from "../utils/access.js";
 import { notifyStaffCadastro } from "../realtime/mecarvitRealtime.js";
+import { recordAudit } from "../utils/audit.js";
 import { ne } from "drizzle-orm";
 
 export const listUsuarios = catchAsync(async (req: Request, res: Response) => {
@@ -84,6 +85,12 @@ export const createUsuario = catchAsync(async (req: Request, res: Response) => {
     });
 
     notifyStaffCadastro(req, "usuario");
+    recordAudit(req, {
+        action: "create",
+        entity: "funcionario",
+        entityId: created.cpf,
+        after: created
+    });
     res.status(201).json({ data: created });
 });
 
@@ -167,6 +174,13 @@ export const updateUsuario = catchAsync(async (req: Request, res: Response) => {
         senhaInicial: body.senhaInicial as boolean | undefined
     });
 
+    recordAudit(req, {
+        action: "update",
+        entity: "funcionario",
+        entityId: targetCpf,
+        before: target,
+        after: updated
+    });
     res.status(200).json({ data: updated });
 });
 

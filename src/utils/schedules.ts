@@ -1,21 +1,15 @@
 import cron from "node-cron";
+import { purgeAllEmpresasAuditLogs } from "../services/auditLogService.js";
 
-// 0 0 * * * -> Runs at midnight
-cron.schedule("0 0 * * *", async () => {
-    // placeholder
-});
+// 0 3 * * * -> purge audit logs older than 6 months at 03:00 UTC
+cron.schedule("0 3 * * *", () => {
+    try {
+        const removed = purgeAllEmpresasAuditLogs();
 
-// 0 3 * * * -> Runs at 3 AM
-cron.schedule("0 3 * * *", async () => {
-    // placeholder
-});
-
-// 0 4 * * * -> Runs at 4 AM
-cron.schedule("0 4 * * *", async () => {
-    // placeholder
-});
-
-// 0 0 * * 0 -> Runs at Sunday midnight
-cron.schedule("0 0 * * 0", async () => {
-    // placeholder
+        if (removed.length > 0) {
+            console.log(`[audit] purged ${removed.length} month folder(s)`);
+        }
+    } catch (error) {
+        console.error("[audit] purge failed:", error);
+    }
 });

@@ -8,6 +8,7 @@ import { clientes } from "../db/schema/index.js";
 import * as clienteService from "../services/clienteService.js";
 import { asEnderecoIds, asEnderecos, asVeiculos, bodyOptionalPhone, bodyOptionalString } from "../utils/nested.js";
 import { notifyStaffCadastro } from "../realtime/mecarvitRealtime.js";
+import { recordAudit } from "../utils/audit.js";
 
 export const listClientes = catchAsync(async (req: Request, res: Response) => {
     const db = requireDb(req);
@@ -61,36 +62,58 @@ export const createCliente = catchAsync(async (req: Request, res: Response) => {
     });
 
     notifyStaffCadastro(req, "cliente");
+    recordAudit(req, {
+        action: "create",
+        entity: "cliente",
+        entityId: String(created.documento),
+        after: created
+    });
     res.status(201).json({ data: created });
 });
 
 export const updateCliente = catchAsync(async (req: Request, res: Response) => {
     const body = bodyOf(req);
+    const db = requireDb(req);
+    const documento = String(req.params.documento);
 
     throwIfInvalid(validateCliente(body, { partial: true }));
 
-    const updated = await clienteService.updateCliente(
-        requireDb(req),
-        String(req.params.documento),
-        {
-            nome: body.nome as string | undefined,
-            nomeSocial: bodyOptionalString(body, "nomeSocial"),
-            cel: bodyOptionalPhone(body, "cel", "telefone"),
-            email: bodyOptionalString(body, "email"),
-            obs: bodyOptionalString(body, "obs"),
-            ativo: body.ativo as boolean | undefined,
-            enderecoIds: asEnderecoIds(body.enderecoIds),
-            enderecos: asEnderecos(body.enderecos),
-            veiculos: asVeiculos(body.veiculos),
-            replaceNested: req.method === "PUT"
-        }
-    );
+    const before = await clienteService.getClienteDetalhe(db, documento);
+    const updated = await clienteService.updateCliente(db, documento, {
+        nome: body.nome as string | undefined,
+        nomeSocial: bodyOptionalString(body, "nomeSocial"),
+        cel: bodyOptionalPhone(body, "cel", "telefone"),
+        email: bodyOptionalString(body, "email"),
+        obs: bodyOptionalString(body, "obs"),
+        ativo: body.ativo as boolean | undefined,
+        enderecoIds: asEnderecoIds(body.enderecoIds),
+        enderecos: asEnderecos(body.enderecos),
+        veiculos: asVeiculos(body.veiculos),
+        replaceNested: req.method === "PUT"
+    });
 
+    recordAudit(req, {
+        action: "update",
+        entity: "cliente",
+        entityId: documento,
+        before,
+        after: updated
+    });
     res.status(200).json({ data: updated });
 });
 
 export const deleteCliente = catchAsync(async (req: Request, res: Response) => {
-    await clienteService.deleteCliente(requireDb(req), String(req.params.documento));
+    const db = requireDb(req);
+    const documento = String(req.params.documento);
+    const before = await clienteService.getClienteDetalhe(db, documento);
 
+    await clienteService.deleteCliente(db, documento);
+
+    recordAudit(req, {
+        action: "delete",
+        entity: "cliente",
+        entityId: documento,
+        before
+    });
     res.status(204).send();
 });

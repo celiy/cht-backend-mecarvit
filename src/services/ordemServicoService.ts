@@ -15,7 +15,10 @@ import {
 import { AppError } from "../utils/AppError.js";
 import * as servicoService from "./servicoService.js";
 import { replacePagamentos, assertPagamentosDentroDoValor, type PagamentoInput } from "./pagamentoSync.js";
-import { pagamentoSituacao } from "@shared/mecarvit/pagamentoSituacao";
+import {
+    pagamentoSituacao,
+    type PagamentoSituacao
+} from "@shared/mecarvit/pagamentoSituacao";
 import { formatDateBr } from "@shared/format/dateTime";
 import { hasPermission, PERMISSIONS } from "@shared/mecarvit/access";
 
@@ -32,7 +35,7 @@ type ItemInputDto = {
     valor: number;
 };
 
-function totalItens(itens: ItemInput[]): number {
+function totalItens(itens: Array<{ quantidade: number; valor: number }>): number {
     return itens.reduce((sum, item) => {
         return sum + Number(item.quantidade) * Number(item.valor);
     }, 0);
@@ -42,58 +45,73 @@ export async function listStatusOs(db: AppDatabase) {
     return db.select().from(statusOs);
 }
 
-const PAYMENT_EPSILON = 0.009;
-
-function isRegistroFullyPaid(valorRegistro: number, pagamentoRows: Array<{ valor: number }>): boolean {
-    const paid = pagamentoRows.reduce((sum, row) => sum + Number(row.valor), 0);
-
-    return paid + PAYMENT_EPSILON >= Number(valorRegistro);
-}
-
 /**
- * OS ids considered fully paid (or not) based on linked entrada and pagamentos.
+ * OS ids whose computed pagamentoSituacao matches `situacao`.
+ * Orçamento (sem situação) is never included.
  */
-export async function listOrdemServicoIdsByPagamento(
+export async function listOrdemServicoIdsByPagamentoSituacao(
     db: AppDatabase,
-    fullyPaid: boolean
+    situacao: PagamentoSituacao
 ): Promise<number[]> {
     const rows = await db
         .select({
             id: ordensServico.id,
-            regEntradaSaidaId: ordensServico.regEntradaSaidaId
+            statusOsId: ordensServico.statusOsId,
+            regEntradaSaidaId: ordensServico.regEntradaSaidaId,
+            dataLimitePagamento: ordensServico.dataLimitePagamento
         })
         .from(ordensServico);
-    const paid: number[] = [];
-    const unpaid: number[] = [];
+    const matched: number[] = [];
 
     for (const row of rows) {
-        if (!row.regEntradaSaidaId) {
-            unpaid.push(row.id);
+        if (row.statusOsId === STATUS_OS.ORCAMENTO) {
             continue;
         }
 
-        const resRows = await db
-            .select()
-            .from(registrosEntradaSaida)
-            .where(eq(registrosEntradaSaida.id, row.regEntradaSaidaId))
-            .limit(1);
-        const registro = resRows[0];
+        let valor = 0;
+        let valorPago = 0;
+        let dataLimite = row.dataLimitePagamento;
 
-        if (!registro) {
-            unpaid.push(row.id);
-            continue;
-        }
+        if (row.regEntradaSaidaId) {
+            const resRows = await db
+                .select()
+                .from(registrosEntradaSaida)
+                .where(eq(registrosEntradaSaida.id, row.regEntradaSaidaId))
+                .limit(1);
+            const registro = resRows[0];
 
-        const pagamentoRows = await loadPagamentos(db, row.regEntradaSaidaId);
+            if (registro) {
+                valor = Number(registro.valor);
+                dataLimite = registro.dataLimitePagamento ?? dataLimite;
+            }
 
-        if (isRegistroFullyPaid(registro.valor, pagamentoRows)) {
-            paid.push(row.id);
+            const pagamentoRows = await loadPagamentos(db, row.regEntradaSaidaId);
+
+            valorPago = pagamentoRows.reduce((sum, pagamento) => sum + Number(pagamento.valor), 0);
         } else {
-            unpaid.push(row.id);
+            const itemRows = await db
+                .select({
+                    quantidade: itensServico.quantidade,
+                    valor: itensServico.valor
+                })
+                .from(itensServico)
+                .where(eq(itensServico.ordemServicoId, row.id));
+
+            valor = totalItens(itemRows);
+        }
+
+        const current = pagamentoSituacao({
+            valor,
+            valorPago,
+            dataLimitePagamento: dataLimite
+        });
+
+        if (current === situacao) {
+            matched.push(row.id);
         }
     }
 
-    return fullyPaid ? paid : unpaid;
+    return matched;
 }
 
 async function requireCliente(db: AppDatabase, documento: string) {

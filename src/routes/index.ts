@@ -11,6 +11,7 @@ import { veiculoRouter } from "./veiculoRoutes.js";
 import { servicoRouter } from "./servicoRoutes.js";
 import { ordemServicoRouter, statusOsRouter } from "./ordemServicoRoutes.js";
 import { dashboardRouter, registroRouter } from "./registroRoutes.js";
+import { auditLogRouter } from "./auditLogRoutes.js";
 
 export const apiRouter = Router();
 
@@ -35,5 +36,6 @@ privateRouter.use("/status-os", statusOsRouter);
 privateRouter.use("/ordem-servico", ordemServicoRouter);
 privateRouter.use("/regentradasaida", registroRouter);
 privateRouter.use("/dashboard", dashboardRouter);
+privateRouter.use("/audit-logs", auditLogRouter);
 
 apiRouter.use(privateRouter);

@@ -10,6 +10,7 @@ import * as registroService from "../services/registroService.js";
 import { AppError } from "../utils/AppError.js";
 import { asPagamentos, isPagamentosOnlyBody } from "../utils/nested.js";
 import { inArray, and, gte, lte, type SQL } from "drizzle-orm";
+import { parsePagamentoSituacaoFilter } from "@shared/mecarvit/pagamentoSituacao";
 
 function queryStringValue(query: Record<string, unknown>, key: string): string | undefined {
     const raw = query[key];
@@ -29,10 +30,11 @@ export const listRegistros = catchAsync(async (req: Request, res: Response) => {
     const db = requireDb(req);
     const query = { ...(req.query as Record<string, unknown>) };
     const ordemServicoRaw = queryStringValue(query, "ordemServicoId");
-    const pagoFilter = queryStringValue(query, "pago")?.trim().toLowerCase();
+    const pagamentoSituacaoRaw = queryStringValue(query, "pagamentoSituacao")?.trim();
     const dataLimiteRaw = queryStringValue(query, "dataLimitePagamento")?.trim();
 
     delete query.ordemServicoId;
+    delete query.pagamentoSituacao;
     delete query.pago;
     delete query.dataLimitePagamento;
 
@@ -81,10 +83,13 @@ export const listRegistros = catchAsync(async (req: Request, res: Response) => {
         features.whereExtra(inArray(registrosEntradaSaida.id, registroIds));
     }
 
-    if (pagoFilter === "sim" || pagoFilter === "nao") {
-        const paidIds = await registroService.listRegistroIdsByPagamento(db, true);
-        const unpaidIds = await registroService.listRegistroIdsByPagamento(db, false);
-        const target = pagoFilter === "sim" ? paidIds : unpaidIds;
+    const pagamentoSituacaoFilter = parsePagamentoSituacaoFilter(pagamentoSituacaoRaw);
+
+    if (pagamentoSituacaoFilter) {
+        const target = await registroService.listRegistroIdsByPagamentoSituacao(
+            db,
+            pagamentoSituacaoFilter
+        );
 
         if (target.length === 0) {
             res.status(200).json({

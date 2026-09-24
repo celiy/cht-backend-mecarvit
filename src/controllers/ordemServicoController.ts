@@ -11,6 +11,8 @@ import * as ordemServicoService from "../services/ordemServicoService.js";
 import { asItens, asPagamentos, asResponsaveis, bodyOptionalString, isPagamentosOnlyBody } from "../utils/nested.js";
 import { eq, inArray, isNull, like, or, sql, and, gte, lte, type SQL } from "drizzle-orm";
 import { utcDayRange } from "../utils/utcDayRange.js";
+import { recordAudit } from "../utils/audit.js";
+import { parsePagamentoSituacaoFilter } from "@shared/mecarvit/pagamentoSituacao";
 
 function canEditFinanceiro(nivelAcesso: string): boolean {
     return (
@@ -56,11 +58,12 @@ export const listOrdens = catchAsync(async (req: Request, res: Response) => {
     const query = { ...(req.query as Record<string, unknown>) };
     const clienteFilter = queryStringValue(query, "cliente")?.trim();
     const veiculoFilter = queryStringValue(query, "veiculo")?.trim();
-    const pagaFilter = queryStringValue(query, "paga")?.trim().toLowerCase();
+    const pagamentoSituacaoRaw = queryStringValue(query, "pagamentoSituacao")?.trim();
     const dataLimiteRaw = queryStringValue(query, "dataLimitePagamento")?.trim();
 
     delete query.cliente;
     delete query.veiculo;
+    delete query.pagamentoSituacao;
     delete query.paga;
     delete query.dataLimitePagamento;
 
@@ -142,10 +145,13 @@ export const listOrdens = catchAsync(async (req: Request, res: Response) => {
         features.whereExtra(inArray(ordensServico.veiculoId, ids));
     }
 
-    if (pagaFilter === "sim" || pagaFilter === "nao") {
-        const paidIds = await ordemServicoService.listOrdemServicoIdsByPagamento(db, true);
-        const unpaidIds = await ordemServicoService.listOrdemServicoIdsByPagamento(db, false);
-        const target = pagaFilter === "sim" ? paidIds : unpaidIds;
+    const pagamentoSituacaoFilter = parsePagamentoSituacaoFilter(pagamentoSituacaoRaw);
+
+    if (pagamentoSituacaoFilter) {
+        const target = await ordemServicoService.listOrdemServicoIdsByPagamentoSituacao(
+            db,
+            pagamentoSituacaoFilter
+        );
 
         if (target.length === 0) {
             res.status(200).json({
@@ -252,6 +258,12 @@ export const createOs = catchAsync(async (req: Request, res: Response) => {
     res.status(201).json({
         data: ordemServicoService.presentOrdemServico(created, actor.nivelAcesso)
     });
+    recordAudit(req, {
+        action: "create",
+        entity: "ordem-servico",
+        entityId: String(created.id),
+        after: ordemServicoService.presentOrdemServico(created, actor.nivelAcesso)
+    });
 });
 
 export const updateOs = catchAsync(async (req: Request, res: Response) => {
@@ -274,9 +286,13 @@ export const updateOs = catchAsync(async (req: Request, res: Response) => {
     const limited = !canCreate;
     const canEditDiagnosticoCliente = isGerente(actor.nivelAcesso);
     const canManageRegistros = canEditFinanceiro(actor.nivelAcesso);
+    const db = requireDb(req);
+    const id = parseId(req.params.id);
+    const beforeOs = await ordemServicoService.getOrdemServico(db, id);
+    const before = ordemServicoService.presentOrdemServico(beforeOs, actor.nivelAcesso);
     const updated = await ordemServicoService.updateOrdemServico(
-        requireDb(req),
-        parseId(req.params.id),
+        db,
+        id,
         limited
             ? {
                 diagnosticoMecanico: bodyOptionalString(body, "diagnosticoMecanico"),
@@ -310,10 +326,16 @@ export const updateOs = catchAsync(async (req: Request, res: Response) => {
                 actorCpf: actor.cpf
             }
     );
+    const after = ordemServicoService.presentOrdemServico(updated, actor.nivelAcesso);
 
-    res.status(200).json({
-        data: ordemServicoService.presentOrdemServico(updated, actor.nivelAcesso)
+    recordAudit(req, {
+        action: "update",
+        entity: "ordem-servico",
+        entityId: String(id),
+        before,
+        after
     });
+    res.status(200).json({ data: after });
 });
 
 export const deleteOs = catchAsync(async (req: Request, res: Response) => {
@@ -323,7 +345,17 @@ export const deleteOs = catchAsync(async (req: Request, res: Response) => {
         throw new AppError("Permissão insuficiente", 403);
     }
 
-    await ordemServicoService.deleteOrdemServico(requireDb(req), parseId(req.params.id));
+    const db = requireDb(req);
+    const id = parseId(req.params.id);
+    const beforeOs = await ordemServicoService.getOrdemServico(db, id);
 
+    await ordemServicoService.deleteOrdemServico(db, id);
+
+    recordAudit(req, {
+        action: "delete",
+        entity: "ordem-servico",
+        entityId: String(id),
+        before: ordemServicoService.presentOrdemServico(beforeOs, actor.nivelAcesso)
+    });
     res.status(204).send();
 });

@@ -5,6 +5,7 @@ import { closeAllCompanies, runMigrations } from "./config/database.js";
 import { startRepl } from "./repl/index.js";
 import { listenOnAvailablePort } from "./utils/findListenPort.js";
 import { attachMecarvitRealtime } from "./realtime/mecarvitRealtime.js";
+import "./utils/schedules.js";
 
 process.on("uncaughtException", (err) => {
     console.error("UNCAUGHT EXCEPTION:", err);
