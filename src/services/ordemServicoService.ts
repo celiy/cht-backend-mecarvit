@@ -265,7 +265,7 @@ async function syncFinanceiro(
             .insert(registrosEntradaSaida)
             .values({
                 ...payload,
-                nome: `${formatDateBr(os.criadoEm ?? os.dataInicio ?? new Date())} - #${osId}`,
+                nome: `${formatDateBr(os.criadoEm ?? os.dataInicio ?? new Date())} - OS #${osId}`,
                 dataLimitePagamento: os.dataLimitePagamento ?? null
             })
             .returning();
@@ -394,16 +394,21 @@ export async function getOrdemServico(db: AppDatabase, id: number) {
 
 export function presentOrdemServico<T extends {
     clienteDocumento: string;
+    dataLimitePagamento?: Date | string | null;
     cliente?: { nome: string; cel?: string | null } | null;
     pagamentos?: unknown[];
     registroEntradaSaida?: { valor: number; dataLimitePagamento?: Date | string | null; pagamentos?: unknown[] } | null;
 }>(os: T, nivelAcesso: string): T {
     const canPii = hasPermission(nivelAcesso, PERMISSIONS.clientes.pii);
     const canPay = hasPermission(nivelAcesso, PERMISSIONS.os.pagamentos);
+    const canFinanceiro =
+        hasPermission(nivelAcesso, PERMISSIONS.financeiro.editar)
+        || hasPermission(nivelAcesso, PERMISSIONS.financeiro.criar);
 
     return {
         ...os,
         clienteDocumento: canPii ? os.clienteDocumento : "",
+        dataLimitePagamento: canFinanceiro ? os.dataLimitePagamento ?? null : null,
         cliente: os.cliente
             ? { nome: os.cliente.nome, cel: canPii ? os.cliente.cel ?? null : null }
             : null,
@@ -411,6 +416,9 @@ export function presentOrdemServico<T extends {
         registroEntradaSaida: os.registroEntradaSaida
             ? {
                 ...os.registroEntradaSaida,
+                dataLimitePagamento: canFinanceiro
+                    ? os.registroEntradaSaida.dataLimitePagamento ?? null
+                    : null,
                 pagamentos: canPay ? os.registroEntradaSaida.pagamentos : []
             }
             : null

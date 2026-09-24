@@ -60,7 +60,7 @@ describe("ordem de serviço, financeiro e dashboard", () => {
 
         expect(concluida.body.data.registroEntradaSaida).toBeTruthy();
         expect(concluida.body.data.registroEntradaSaida.tipo).toBe("entrada");
-        expect(concluida.body.data.registroEntradaSaida.nome).toMatch(/^\d{2}\/\d{2}\/\d{4} - #/);
+        expect(concluida.body.data.registroEntradaSaida.nome).toMatch(/^\d{2}\/\d{2}\/\d{4} - OS #/);
         const resId = concluida.body.data.registroEntradaSaida.id as number;
 
         const pagamento1 = await request(app)

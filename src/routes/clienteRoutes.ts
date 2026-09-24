@@ -1,18 +1,16 @@
 import { Router } from "express";
 import * as clienteController from "../controllers/clienteController.js";
 import { requireAccess } from "../middlewares/requireAccess.js";
-import { ACCESS } from "@shared/mecarvit/access";
+import { ACCESS, PERMISSIONS } from "@shared/mecarvit/access";
 
 export const clienteRouter = Router();
 
-clienteRouter.use(requireAccess(ACCESS.CLIENTES));
-
 clienteRouter.route("/")
-    .get(clienteController.listClientes)
-    .post(clienteController.createCliente);
+    .get(requireAccess(PERMISSIONS.clientes.ver), clienteController.listClientes)
+    .post(requireAccess(PERMISSIONS.clientes.criar), clienteController.createCliente);
 
 clienteRouter.route("/:documento")
-    .get(clienteController.getCliente)
-    .put(clienteController.updateCliente)
-    .patch(clienteController.updateCliente)
-    .delete(clienteController.deleteCliente);
+    .get(requireAccess(PERMISSIONS.clientes.ver), clienteController.getCliente)
+    .put(requireAccess(ACCESS.CLIENTES), clienteController.updateCliente)
+    .patch(requireAccess(ACCESS.CLIENTES), clienteController.updateCliente)
+    .delete(requireAccess(PERMISSIONS.clientes.excluir), clienteController.deleteCliente);

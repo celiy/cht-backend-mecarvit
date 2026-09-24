@@ -133,7 +133,7 @@ export async function login(dto: { email: string; senha: string; empresaId?: num
         throw new AppError(
             "Selecione a empresa para continuar",
             400,
-            { empresaId: "empresaId é obrigatório para este usuário" },
+            { empresaId: "Selecione a oficina" },
             empresas
         );
     }

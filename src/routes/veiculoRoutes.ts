@@ -1,18 +1,16 @@
 import { Router } from "express";
 import * as veiculoController from "../controllers/veiculoController.js";
 import { requireAccess } from "../middlewares/requireAccess.js";
-import { ACCESS } from "@shared/mecarvit/access";
+import { ACCESS, PERMISSIONS } from "@shared/mecarvit/access";
 
 export const veiculoRouter = Router();
 
-veiculoRouter.use(requireAccess(ACCESS.VEICULOS));
-
 veiculoRouter.route("/")
-    .get(veiculoController.listVeiculos)
-    .post(veiculoController.createVeiculo);
+    .get(requireAccess(PERMISSIONS.veiculos.ver), veiculoController.listVeiculos)
+    .post(requireAccess(PERMISSIONS.veiculos.criar), veiculoController.createVeiculo);
 
 veiculoRouter.route("/:id")
-    .get(veiculoController.getVeiculo)
-    .put(veiculoController.updateVeiculo)
-    .patch(veiculoController.updateVeiculo)
-    .delete(veiculoController.deleteVeiculo);
+    .get(requireAccess(PERMISSIONS.veiculos.ver), veiculoController.getVeiculo)
+    .put(requireAccess(ACCESS.VEICULOS), veiculoController.updateVeiculo)
+    .patch(requireAccess(ACCESS.VEICULOS), veiculoController.updateVeiculo)
+    .delete(requireAccess(PERMISSIONS.veiculos.excluir), veiculoController.deleteVeiculo);

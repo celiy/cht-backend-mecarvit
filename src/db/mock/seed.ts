@@ -7,6 +7,7 @@ import {
     createCompanyDatabase,
     listLocalEmpresaIds,
     openCompany,
+    removeCompanyFiles,
     type AppDatabase
 } from "../../config/database.js";
 import { env } from "../../config/env.js";
@@ -27,7 +28,13 @@ import {
     veiculos
 } from "../schema/index.js";
 import { clearMockInDatabase } from "./clear.js";
-import { MOCK_COMPANY_NAME, MOCK_COUNTS, MOCK_LOGIN, MOCK_STAFF_PASSWORD } from "./constants.js";
+import {
+    MOCK_COMPANY_NAMES,
+    MOCK_COUNTS,
+    MOCK_LOGIN,
+    MOCK_SHARED_STAFF,
+    MOCK_STAFF_PASSWORD
+} from "./constants.js";
 import { ACCESS, hasAccess, migrateNivelAcesso } from "@shared/mecarvit/access";
 
 const MOCK = true;
@@ -265,52 +272,39 @@ function daysAgo(rng: Rng, min: number, max: number): Date {
     return date;
 }
 
-async function findMockCompany(): Promise<{ empresaId: number; db: AppDatabase } | null> {
+async function listMockOnlyCompanies(): Promise<Array<{ empresaId: number; db: AppDatabase }>> {
+    const found: Array<{ empresaId: number; db: AppDatabase }> = [];
+
     for (const empresaId of listLocalEmpresaIds()) {
         const db = openCompany(empresaId);
-        const rows = await db.select().from(empresas).limit(1);
-
-        if (rows[0]?.mock) {
-            return { empresaId, db };
-        }
-    }
-
-    return null;
-}
-
-export async function populateMock(): Promise<{ empresaId: number; created: boolean }> {
-    let existing = await findMockCompany();
-    let empresaId: number;
-    let db: AppDatabase;
-    let created = false;
-
-    if (existing) {
-        const realUsers = await existing.db
+        const empresa = (await db.select().from(empresas).limit(1))[0];
+        const realUsers = await db
             .select({ cpf: usuarios.cpf })
             .from(usuarios)
             .where(eq(usuarios.mock, false));
 
-        if (realUsers.length > 0) {
-            existing = null;
+        if (empresa?.mock === true && realUsers.length === 0) {
+            found.push({ empresaId, db });
         }
     }
 
-    if (existing) {
-        empresaId = existing.empresaId;
-        db = existing.db;
-        await clearMockInDatabase(db);
-        await db.update(empresas).set({ mock: true, nome: MOCK_COMPANY_NAME }).where(eq(empresas.id, empresaId));
-    } else {
-        const createdCompany = await createCompanyDatabase(MOCK_COMPANY_NAME);
+    return found;
+}
 
-        empresaId = createdCompany.empresaId;
-        db = createdCompany.db;
-        created = true;
-        await db.update(empresas).set({ mock: true }).where(eq(empresas.id, empresaId));
-    }
+function cargoIdByName(
+    cargoRows: Array<{ id: number; nome: string }>,
+    nome: string
+): number | undefined {
+    return cargoRows.find((cargo) => cargo.nome === nome)?.id;
+}
 
-    const rng = createRng(SEED);
-    const passwordHash = await bcrypt.hash(MOCK_STAFF_PASSWORD, BCRYPT_ROUNDS);
+async function fillMockCompany(
+    db: AppDatabase,
+    empresaId: number,
+    options: { officeIndex: number; passwordHash: string }
+): Promise<void> {
+    const rng = createRng(SEED + options.officeIndex * 7919);
+    const passwordHash = options.passwordHash;
     await db
         .insert(cargos)
         .values(CARGO_DEFS.map((cargo) => ({
@@ -348,10 +342,42 @@ export async function populateMock(): Promise<{ empresaId: number; created: bool
         mock: MOCK
     }];
 
+    for (const [sharedIndex, shared] of MOCK_SHARED_STAFF.entries()) {
+        const preferredName = sharedIndex === 0 ? "Gerente" : "Mecânico";
+        const cargoId = cargoIdByName(cargoRows, preferredName)
+            ?? cargoIds[sharedIndex % cargoIds.length];
+
+        if (cargoId === undefined) {
+            continue;
+        }
+
+        staffCpfs.push(shared.cpf);
+
+        const sharedCargo = cargoRows.find((cargo) => cargo.id === cargoId);
+        const nivel = sharedCargo?.nivelAcesso ?? "";
+
+        if (preferredName === "Mecânico" || hasAccess(nivel, ACCESS.OS)) {
+            mechanicCpfs.push(shared.cpf);
+        }
+
+        userValues.push({
+            cpf: shared.cpf,
+            nome: shared.nome,
+            email: shared.email,
+            senha: passwordHash,
+            ativo: true,
+            senhaInicial: false,
+            fundador: false,
+            cargoId,
+            empresaId,
+            mock: MOCK
+        });
+    }
+
     for (let index = 0; index < MOCK_COUNTS.staff; index += 1) {
         const cargoId = cargoIds[index % cargoIds.length];
         const cargo = cargoRows[index % cargoRows.length];
-        const cpf = cpfFromSequence(index + 1);
+        const cpf = cpfFromSequence(index + 1 + options.officeIndex * 200);
 
         if (cargoId === undefined || cargo === undefined) {
             continue;
@@ -366,7 +392,7 @@ export async function populateMock(): Promise<{ empresaId: number; created: bool
         userValues.push({
             cpf,
             nome: fullName(rng),
-            email: `funcionario.${index + 1}@mock.mecarvit`,
+            email: `funcionario.${index + 1}.o${options.officeIndex + 1}@mock.mecarvit`,
             senha: passwordHash,
             ativo: index % 7 !== 0,
             senhaInicial: index % 5 === 0,
@@ -623,8 +649,56 @@ export async function populateMock(): Promise<{ empresaId: number; created: bool
             });
         }
     }
+}
 
-    return { empresaId, created };
+export async function populateMock(): Promise<{
+    empresaId: number;
+    created: boolean;
+    empresas: Array<{ empresaId: number; created: boolean; nome: string }>;
+}> {
+    const existing = await listMockOnlyCompanies();
+    const passwordHash = await bcrypt.hash(MOCK_STAFF_PASSWORD, BCRYPT_ROUNDS);
+    const seeded: Array<{ empresaId: number; created: boolean; nome: string }> = [];
+
+    for (const [officeIndex, nome] of MOCK_COMPANY_NAMES.entries()) {
+        const reuse = existing[officeIndex];
+        let empresaId: number;
+        let db: AppDatabase;
+        let created = false;
+
+        if (reuse) {
+            empresaId = reuse.empresaId;
+            db = reuse.db;
+            await clearMockInDatabase(db);
+            await db.update(empresas).set({ mock: true, nome }).where(eq(empresas.id, empresaId));
+        } else {
+            const createdCompany = await createCompanyDatabase(nome);
+
+            empresaId = createdCompany.empresaId;
+            db = createdCompany.db;
+            created = true;
+            await db.update(empresas).set({ mock: true }).where(eq(empresas.id, empresaId));
+        }
+
+        await fillMockCompany(db, empresaId, { officeIndex, passwordHash });
+        seeded.push({ empresaId, created, nome });
+    }
+
+    for (const extra of existing.slice(MOCK_COMPANY_NAMES.length)) {
+        removeCompanyFiles(extra.empresaId);
+    }
+
+    const first = seeded[0];
+
+    if (!first) {
+        throw new Error("Nenhuma oficina mock gerada");
+    }
+
+    return {
+        empresaId: first.empresaId,
+        created: first.created,
+        empresas: seeded
+    };
 }
 
 async function runCli() {
@@ -636,21 +710,22 @@ async function runCli() {
     console.log("Populando dados mock...");
 
     const result = await populateMock();
-    const db = openCompany(result.empresaId);
-    const usuariosMock = (await db.select().from(usuarios)).filter((row) => row.mock).length;
-    const clientesMock = (await db.select().from(clientes)).filter((row) => row.mock).length;
-    const veiculosMock = (await db.select().from(veiculos)).filter((row) => row.mock).length;
-    const osMock = (await db.select().from(ordensServico)).filter((row) => row.mock).length;
 
     closeDatabase();
 
-    console.log(result.created
-        ? `Empresa mock criada: ${MOCK_COMPANY_NAME} (id ${result.empresaId}).`
-        : `Empresa mock refeita: ${MOCK_COMPANY_NAME} (id ${result.empresaId}).`);
-    console.log(`Registros mock: ${usuariosMock} usuários, ${clientesMock} clientes, ${veiculosMock} veículos, ${osMock} OS.`);
-    console.log("Login superadmin:");
-    console.log(`  email: ${MOCK_LOGIN.email}`);
-    console.log(`  senha: ${MOCK_LOGIN.senha}`);
+    for (const company of result.empresas) {
+        console.log(company.created
+            ? `Empresa mock criada: ${company.nome} (id ${company.empresaId}).`
+            : `Empresa mock refeita: ${company.nome} (id ${company.empresaId}).`);
+    }
+
+    console.log(`Senha padrão: ${MOCK_STAFF_PASSWORD}`);
+    console.log(`Login superadmin (nas ${result.empresas.length} oficinas): ${MOCK_LOGIN.email}`);
+
+    for (const shared of MOCK_SHARED_STAFF) {
+        console.log(`Login compartilhado: ${shared.email}`);
+    }
+
     console.log("Guia: docs/getting-started.md");
     console.log("Se o servidor estiver rodando, reinicie (`npm run dev`).");
 }

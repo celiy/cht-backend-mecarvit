@@ -1,18 +1,16 @@
 import { Router } from "express";
 import * as servicoController from "../controllers/servicoController.js";
 import { requireAccess } from "../middlewares/requireAccess.js";
-import { ACCESS } from "@shared/mecarvit/access";
+import { ACCESS, PERMISSIONS } from "@shared/mecarvit/access";
 
 export const servicoRouter = Router();
 
-servicoRouter.use(requireAccess(ACCESS.OS));
-
 servicoRouter.route("/")
-    .get(servicoController.listServicos)
-    .post(servicoController.createServico);
+    .get(requireAccess(PERMISSIONS.os.ver), servicoController.listServicos)
+    .post(requireAccess(ACCESS.OS), servicoController.createServico);
 
 servicoRouter.route("/:id")
-    .get(servicoController.getServico)
-    .put(servicoController.updateServico)
-    .patch(servicoController.updateServico)
-    .delete(servicoController.deleteServico);
+    .get(requireAccess(PERMISSIONS.os.ver), servicoController.getServico)
+    .put(requireAccess(ACCESS.OS), servicoController.updateServico)
+    .patch(requireAccess(ACCESS.OS), servicoController.updateServico)
+    .delete(requireAccess(PERMISSIONS.os.excluir), servicoController.deleteServico);

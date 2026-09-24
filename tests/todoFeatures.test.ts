@@ -209,7 +209,7 @@ describe("regras de OS e pagamentos", () => {
             .expect(200);
 
         expect(got.body.data.registroEntradaSaida.nome).toMatch(
-            new RegExp(`^\\d{2}/\\d{2}/\\d{4} - #${osId}$`)
+            new RegExp(`^\\d{2}/\\d{2}/\\d{4} - OS #${osId}$`)
         );
 
         const emptied = await request(app)
@@ -338,6 +338,107 @@ describe("cargos pré-configurados e mecânico", () => {
             .expect(200);
 
         expect(patched.body.data.diagnosticoMecanico).toBe("Pastilha e disco");
+
+        const itemsPatched = await request(app)
+            .patch(`/api/ordem-servico/${os.body.data.id}`)
+            .set(bearer(mecanicoToken))
+            .send({
+                itens: [{ servicoNome: "Disco", quantidade: 2, valor: 150 }]
+            })
+            .expect(200);
+
+        expect(itemsPatched.body.data.itens).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    quantidade: 2,
+                    valor: 150
+                })
+            ])
+        );
+        expect(itemsPatched.body.data.itens).toHaveLength(1);
+    });
+
+    it("com OS criar e só visualização de cliente, lista e atribui cliente existente sem cadastrar", async () => {
+        const created = await cadastrarOficina(app);
+        const token = created.token as string;
+        const cargo = await criarCargo(app, token, JSON.stringify([
+            PERMISSIONS.os.ver,
+            PERMISSIONS.os.editar,
+            PERMISSIONS.os.criar,
+            PERMISSIONS.clientes.ver,
+            PERMISSIONS.veiculos.ver,
+            PERMISSIONS.funcionarios.ver,
+            PERMISSIONS.financeiro.ver
+        ]), "OS com cliente existente");
+        const staff = await criarFuncionario(app, token, cargo.id, { nome: "Consultor OS" });
+        const documento = uniqueCpf();
+        const cliente = await request(app)
+            .post("/api/cliente")
+            .set(bearer(token))
+            .send({
+                documento,
+                nome: "Cliente Ja Cadastrado",
+                veiculos: [{ modelo: "Onix", placa: "OSI1234" }]
+            })
+            .expect(201);
+        const veiculoId = cliente.body.data.veiculos[0].id as number;
+
+        await request(app)
+            .post(`/api/usuario/${staff.cpf}/senha`)
+            .set(bearer(token))
+            .send({ senhaAtual: staff.senha, senhaNova: SENHA_NOVA })
+            .expect(200);
+
+        const login = await request(app)
+            .post("/api/login")
+            .send({ email: staff.email, senha: SENHA_NOVA, empresaId: created.empresaId })
+            .expect(200);
+        const staffToken = login.body.data.token as string;
+
+        const listed = await request(app)
+            .get("/api/cliente?limit=20")
+            .set(bearer(staffToken))
+            .expect(200);
+
+        expect(listed.body.data.some((row: { documento: string }) => row.documento === documento)).toBe(true);
+
+        await request(app)
+            .post("/api/cliente")
+            .set(bearer(staffToken))
+            .send({
+                documento: uniqueCpf(),
+                nome: "Nao Deve Criar"
+            })
+            .expect(403);
+
+        const listedVeiculos = await request(app)
+            .get("/api/veiculo?limit=20")
+            .set(bearer(staffToken))
+            .expect(200);
+
+        expect(listedVeiculos.body.data.some((row: { id: number }) => row.id === veiculoId)).toBe(true);
+
+        await request(app)
+            .post("/api/veiculo")
+            .set(bearer(staffToken))
+            .send({
+                clienteDocumento: documento,
+                modelo: "Novo",
+                placa: "NOV9999"
+            })
+            .expect(403);
+
+        const createdOs = await request(app)
+            .post("/api/ordem-servico")
+            .set(bearer(staffToken))
+            .send({
+                clienteDocumento: documento,
+                veiculoId,
+                dataLimitePagamento: "2026-12-01"
+            })
+            .expect(201);
+
+        expect(createdOs.body.data.dataLimitePagamento).toBeNull();
     });
 
     it("usuário com edição de OS atualiza a OS e cargo comum não gerencia funcionários", async () => {
@@ -398,6 +499,40 @@ describe("cargos pré-configurados e mecânico", () => {
             .expect(200);
 
         expect(updated.body.data.diagnosticoMecanico).toBe("Folga");
+
+        await request(app)
+            .put(`/api/ordem-servico/${os.body.data.id}`)
+            .set(bearer(staffToken))
+            .send({
+                clienteDocumento: documento,
+                veiculoId,
+                diagnosticoCliente: "Tentativa de alterar",
+                diagnosticoMecanico: "Folga",
+                itens: [{ servicoNome: "Revisão", quantidade: 1, valor: 40 }]
+            })
+            .expect(200);
+
+        const kept = await request(app)
+            .get(`/api/ordem-servico/${os.body.data.id}`)
+            .set(bearer(staffToken))
+            .expect(200);
+
+        expect(kept.body.data.diagnosticoCliente).toBe("Barulho");
+
+        const originalStatus = os.body.data.statusOsId as number;
+
+        await request(app)
+            .patch(`/api/ordem-servico/${os.body.data.id}`)
+            .set(bearer(staffToken))
+            .send({ statusOsId: 4 })
+            .expect(200);
+
+        const statusKept = await request(app)
+            .get(`/api/ordem-servico/${os.body.data.id}`)
+            .set(bearer(staffToken))
+            .expect(200);
+
+        expect(statusKept.body.data.statusOsId).toBe(originalStatus);
 
         await request(app)
             .post("/api/cargo")

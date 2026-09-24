@@ -12,6 +12,7 @@ import {
     PERMISSIONS,
     isSuperadmin,
     migrateNivelAcesso,
+    parsePermissions,
     serializePermissions
 } from "@shared/mecarvit/access";
 import { env } from "./env.js";
@@ -76,9 +77,22 @@ export async function seedCompany(db: AppDatabase, empresaId: number, nome: stri
 
     for (const cargo of existingCargos) {
         const migrated = migrateNivelAcesso(cargo.nivelAcesso);
+        const keys = parsePermissions(migrated);
+        const hasOs = keys.some((key) => key.startsWith("os."));
 
-        if (migrated !== cargo.nivelAcesso) {
-            await db.update(cargos).set({ nivelAcesso: migrated }).where(eq(cargos.id, cargo.id));
+        if (hasOs && !isSuperadmin(migrated)) {
+            keys.push(
+                PERMISSIONS.funcionarios.ver,
+                PERMISSIONS.clientes.ver,
+                PERMISSIONS.veiculos.ver,
+                PERMISSIONS.financeiro.ver
+            );
+        }
+
+        const next = serializePermissions(keys);
+
+        if (next !== cargo.nivelAcesso) {
+            await db.update(cargos).set({ nivelAcesso: next }).where(eq(cargos.id, cargo.id));
         }
     }
 

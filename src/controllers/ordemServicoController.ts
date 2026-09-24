@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { validateOrdemServico } from "@shared/validators/mecarvit";
-import { PERMISSIONS, hasPermission } from "@shared/mecarvit/access";
+import { PERMISSIONS, hasPermission, isGerente } from "@shared/mecarvit/access";
 import { catchAsync } from "../utils/catchAsync.js";
 import { AppError } from "../utils/AppError.js";
 import { ApiFeatures } from "../utils/ApiFeatures.js";
@@ -11,6 +11,13 @@ import * as ordemServicoService from "../services/ordemServicoService.js";
 import { asItens, asPagamentos, asResponsaveis, bodyOptionalString, isPagamentosOnlyBody } from "../utils/nested.js";
 import { eq, inArray, isNull, like, or, sql, and, gte, lte, type SQL } from "drizzle-orm";
 import { utcDayRange } from "../utils/utcDayRange.js";
+
+function canEditFinanceiro(nivelAcesso: string): boolean {
+    return (
+        hasPermission(nivelAcesso, PERMISSIONS.financeiro.editar)
+        || hasPermission(nivelAcesso, PERMISSIONS.financeiro.criar)
+    );
+}
 
 export const listStatusOs = catchAsync(async (req: Request, res: Response) => {
     const db = requireDb(req);
@@ -220,6 +227,7 @@ export const createOs = catchAsync(async (req: Request, res: Response) => {
     }
 
     const body = bodyOf(req);
+    const canManageRegistros = canEditFinanceiro(actor.nivelAcesso);
 
     throwIfInvalid(validateOrdemServico(body, { partial: false }));
 
@@ -232,7 +240,9 @@ export const createOs = catchAsync(async (req: Request, res: Response) => {
         obs: bodyOptionalString(body, "obs", "observacao"),
         dataInicio: bodyOptionalString(body, "dataInicio"),
         dataConclusao: bodyOptionalString(body, "dataConclusao"),
-        dataLimitePagamento: bodyOptionalString(body, "dataLimitePagamento"),
+        dataLimitePagamento: canManageRegistros
+            ? bodyOptionalString(body, "dataLimitePagamento")
+            : undefined,
         itens: asItens(body.itens),
         responsaveis: asResponsaveis(body.responsaveis),
         pagamentos: asPagamentos(body.pagamentos),
@@ -262,6 +272,8 @@ export const updateOs = catchAsync(async (req: Request, res: Response) => {
     );
 
     const limited = !canCreate;
+    const canEditDiagnosticoCliente = isGerente(actor.nivelAcesso);
+    const canManageRegistros = canEditFinanceiro(actor.nivelAcesso);
     const updated = await ordemServicoService.updateOrdemServico(
         requireDb(req),
         parseId(req.params.id),
@@ -269,19 +281,28 @@ export const updateOs = catchAsync(async (req: Request, res: Response) => {
             ? {
                 diagnosticoMecanico: bodyOptionalString(body, "diagnosticoMecanico"),
                 obs: bodyOptionalString(body, "obs", "observacao"),
+                itens: asItens(body.itens),
                 replaceNested: false,
                 actorCpf: actor.cpf
             }
             : {
-                clienteDocumento: body.clienteDocumento as string | undefined,
+                clienteDocumento: String(body.clienteDocumento ?? "").trim()
+                    ? String(body.clienteDocumento)
+                    : undefined,
                 veiculoId: body.veiculoId === undefined ? undefined : Number(body.veiculoId),
-                statusOsId: body.statusOsId === undefined ? undefined : Number(body.statusOsId),
-                diagnosticoCliente: bodyOptionalString(body, "diagnosticoCliente"),
+                statusOsId: canEditDiagnosticoCliente && body.statusOsId !== undefined
+                    ? Number(body.statusOsId)
+                    : undefined,
+                diagnosticoCliente: canEditDiagnosticoCliente
+                    ? bodyOptionalString(body, "diagnosticoCliente")
+                    : undefined,
                 diagnosticoMecanico: bodyOptionalString(body, "diagnosticoMecanico"),
                 obs: bodyOptionalString(body, "obs", "observacao"),
                 dataInicio: bodyOptionalString(body, "dataInicio"),
                 dataConclusao: bodyOptionalString(body, "dataConclusao"),
-                dataLimitePagamento: bodyOptionalString(body, "dataLimitePagamento"),
+                dataLimitePagamento: canManageRegistros
+                    ? bodyOptionalString(body, "dataLimitePagamento")
+                    : undefined,
                 itens: asItens(body.itens),
                 responsaveis: asResponsaveis(body.responsaveis),
                 pagamentos: canPay ? asPagamentos(body.pagamentos) : undefined,
