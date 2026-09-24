@@ -27,29 +27,3 @@ export function verifyToken(token: string): AuthJwtPayload {
 
     return { sub, email, empresaId };
 }
-
-export interface SystemJwtPayload {
-    typ: "system";
-    sub: string;
-}
-
-export function signSystemToken(login: string): string {
-    const options: SignOptions = {
-        expiresIn: env.jwt.expiresIn as SignOptions["expiresIn"]
-    };
-
-    return jwt.sign({ typ: "system", sub: login }, env.jwt.secret as Secret, options);
-}
-
-export function verifySystemToken(token: string): SystemJwtPayload {
-    const decoded = jwt.verify(token, env.jwt.secret as Secret) as JsonWebTokenPayload & {
-        typ?: string;
-        sub?: string;
-    };
-
-    if (decoded.typ !== "system" || !decoded.sub) {
-        throw new Error("Token inválido");
-    }
-
-    return { typ: "system", sub: String(decoded.sub) };
-}
