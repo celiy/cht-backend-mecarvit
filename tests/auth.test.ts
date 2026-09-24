@@ -25,7 +25,7 @@ describe("health e cadastro/login", () => {
         expect(created.response.status).toBe(201);
         expect(created.token).toBeTruthy();
         expect(created.response.body.data.precisaTrocarSenha).toBe(false);
-        expect(created.response.body.data.usuario.nivelAcesso).toContain("0");
+        expect(created.response.body.data.usuario.nivelAcesso).toContain("superadmin");
 
         const locais = await request(app).get("/api/empresa-locais").expect(200);
         const ids = (locais.body.data as Array<{ id: number }>).map((item) => item.id);

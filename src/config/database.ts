@@ -6,6 +6,14 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { eq } from "drizzle-orm";
 import * as schema from "../db/schema/index.js";
 import { cargos, empresas, statusOs, STATUS_OS_NOMES } from "../db/schema/index.js";
+import {
+    GERENTE_PERMISSIONS,
+    MECANICO_PERMISSIONS,
+    PERMISSIONS,
+    isSuperadmin,
+    migrateNivelAcesso,
+    serializePermissions
+} from "@shared/mecarvit/access";
 import { env } from "./env.js";
 
 export type AppDatabase = BetterSQLite3Database<typeof schema>;
@@ -64,17 +72,45 @@ export async function seedCompany(db: AppDatabase, empresaId: number, nome: stri
         await db.insert(empresas).values({ id: empresaId, nome: nome.trim() });
     }
 
-    const existingCargo = await db.select().from(cargos).where(eq(cargos.nivelAcesso, "0")).limit(1);
+    const existingCargos = await db.select().from(cargos);
 
-    if (!existingCargo[0]) {
+    for (const cargo of existingCargos) {
+        const migrated = migrateNivelAcesso(cargo.nivelAcesso);
+
+        if (migrated !== cargo.nivelAcesso) {
+            await db.update(cargos).set({ nivelAcesso: migrated }).where(eq(cargos.id, cargo.id));
+        }
+    }
+
+    const cargosNow = await db.select().from(cargos);
+    const hasSuperadmin = cargosNow.some((cargo) => isSuperadmin(cargo.nivelAcesso));
+
+    if (!hasSuperadmin) {
         await db.insert(cargos).values({
             id: 1,
             nome: "Superadmin",
-            nivelAcesso: "0"
+            nivelAcesso: serializePermissions([PERMISSIONS.SUPERADMIN])
+        });
+    }
+
+    const cargoByName = new Map(cargosNow.map((cargo) => [cargo.nome, cargo]));
+
+    if (!cargoByName.has("Gerente")) {
+        await db.insert(cargos).values({
+            nome: "Gerente",
+            nivelAcesso: serializePermissions(GERENTE_PERMISSIONS)
+        });
+    }
+
+    if (!cargoByName.has("Mecânico")) {
+        await db.insert(cargos).values({
+            nome: "Mecânico",
+            nivelAcesso: serializePermissions(MECANICO_PERMISSIONS)
         });
     }
 
     const existingStatus = await db.select().from(statusOs);
+    const statusNames = new Set(existingStatus.map((row) => row.nome));
 
     if (existingStatus.length === 0) {
         await db.insert(statusOs).values(
@@ -83,6 +119,17 @@ export async function seedCompany(db: AppDatabase, empresaId: number, nome: stri
                 nome: nomeStatus
             }))
         );
+    } else {
+        for (const [index, nomeStatus] of STATUS_OS_NOMES.entries()) {
+            if (statusNames.has(nomeStatus)) {
+                continue;
+            }
+
+            await db.insert(statusOs).values({
+                id: index + 1,
+                nome: nomeStatus
+            });
+        }
     }
 }
 

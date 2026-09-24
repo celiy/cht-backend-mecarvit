@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import type { AppDatabase } from "../config/database.js";
 import { cargos } from "../db/schema/index.js";
 import { AppError } from "../utils/AppError.js";
-import { isSuperadmin } from "../utils/access.js";
+import { isPresetCargoName, isSuperadmin, normalizeNivelAcesso } from "../utils/access.js";
 import { countUsuariosByCargo } from "./usuarioService.js";
 
 export async function listCargos(db: AppDatabase) {
@@ -20,8 +20,10 @@ export async function getCargo(db: AppDatabase, id: number) {
     return cargo;
 }
 
-export async function createCargo(db: AppDatabase, dto: { nome: string; nivelAcesso: string }) {
-    if (isSuperadmin(String(dto.nivelAcesso))) {
+export async function createCargo(db: AppDatabase, dto: { nome: string; nivelAcesso: unknown }) {
+    const nivelAcesso = normalizeNivelAcesso(dto.nivelAcesso);
+
+    if (isSuperadmin(nivelAcesso)) {
         throw new AppError("nivelAcesso 0 é exclusivo do gestor fundador", 400, {
             nivelAcesso: "Não é permitido criar outro cargo superadmin"
         });
@@ -31,7 +33,7 @@ export async function createCargo(db: AppDatabase, dto: { nome: string; nivelAce
         .insert(cargos)
         .values({
             nome: dto.nome.trim(),
-            nivelAcesso: String(dto.nivelAcesso).trim()
+            nivelAcesso
         })
         .returning();
     const cargo = inserted[0];
@@ -46,17 +48,28 @@ export async function createCargo(db: AppDatabase, dto: { nome: string; nivelAce
 export async function updateCargo(
     db: AppDatabase,
     id: number,
-    dto: { nome?: string; nivelAcesso?: string }
+    dto: { nome?: string; nivelAcesso?: unknown },
+    actorNivelAcesso?: string
 ) {
     const current = await getCargo(db, id);
+    const nextNivel =
+        dto.nivelAcesso === undefined ? undefined : normalizeNivelAcesso(dto.nivelAcesso);
 
-    if (isSuperadmin(current.nivelAcesso) && dto.nivelAcesso !== undefined && !isSuperadmin(String(dto.nivelAcesso))) {
+    if (
+        isPresetCargoName(current.nome) &&
+        actorNivelAcesso !== undefined &&
+        !isSuperadmin(actorNivelAcesso)
+    ) {
+        throw new AppError("Apenas o superadmin pode alterar cargos pré-configurados", 403);
+    }
+
+    if (isSuperadmin(current.nivelAcesso) && nextNivel !== undefined && !isSuperadmin(nextNivel)) {
         throw new AppError("O cargo de superadmin não pode perder o nível 0", 409, {
             nivelAcesso: "O cargo de superadmin não pode ser alterado"
         });
     }
 
-    if (dto.nivelAcesso !== undefined && isSuperadmin(String(dto.nivelAcesso)) && !isSuperadmin(current.nivelAcesso)) {
+    if (nextNivel !== undefined && isSuperadmin(nextNivel) && !isSuperadmin(current.nivelAcesso)) {
         throw new AppError("nivelAcesso 0 é exclusivo do gestor fundador", 400, {
             nivelAcesso: "Não é permitido promover um cargo a superadmin"
         });
@@ -68,8 +81,8 @@ export async function updateCargo(
         patch.nome = dto.nome.trim();
     }
 
-    if (dto.nivelAcesso !== undefined) {
-        patch.nivelAcesso = String(dto.nivelAcesso).trim();
+    if (nextNivel !== undefined) {
+        patch.nivelAcesso = nextNivel;
     }
 
     if (Object.keys(patch).length === 0) {
@@ -86,8 +99,16 @@ export async function updateCargo(
     return cargo;
 }
 
-export async function deleteCargo(db: AppDatabase, id: number) {
+export async function deleteCargo(db: AppDatabase, id: number, actorNivelAcesso?: string) {
     const current = await getCargo(db, id);
+
+    if (
+        isPresetCargoName(current.nome) &&
+        actorNivelAcesso !== undefined &&
+        !isSuperadmin(actorNivelAcesso)
+    ) {
+        throw new AppError("Apenas o superadmin pode excluir cargos pré-configurados", 403);
+    }
 
     if (isSuperadmin(current.nivelAcesso)) {
         throw new AppError("O cargo de superadmin não pode ser excluído", 409);

@@ -95,8 +95,7 @@ export function asItens(value: unknown): Array<{
     servicoId?: number;
     servicoNome?: string;
     quantidade: number;
-    valorObra: number;
-    valorPecas?: number | null;
+    valor: number;
 }> | undefined {
     if (!Array.isArray(value)) {
         return undefined;
@@ -110,6 +109,10 @@ export function asItens(value: unknown): Array<{
                 ? undefined
                 : Number(servicoIdRaw);
         const servicoNomeRaw = record.servicoNome;
+        const hasValor = record.valor !== undefined && record.valor !== null && record.valor !== "";
+        const valor = hasValor
+            ? Number(record.valor)
+            : Number(record.valorObra ?? 0) + Number(record.valorPecas ?? 0);
 
         return {
             servicoId: Number.isInteger(servicoId) && servicoId! > 0 ? servicoId : undefined,
@@ -118,10 +121,7 @@ export function asItens(value: unknown): Array<{
                     ? undefined
                     : String(servicoNomeRaw),
             quantidade: Number(record.quantidade),
-            valorObra: Number(record.valorObra),
-            valorPecas: record.valorPecas === undefined || record.valorPecas === null
-                ? null
-                : Number(record.valorPecas)
+            valor
         };
     });
 }

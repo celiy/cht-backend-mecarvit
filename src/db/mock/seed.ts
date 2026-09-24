@@ -28,6 +28,7 @@ import {
 } from "../schema/index.js";
 import { clearMockInDatabase } from "./clear.js";
 import { MOCK_COMPANY_NAME, MOCK_COUNTS, MOCK_LOGIN, MOCK_STAFF_PASSWORD } from "./constants.js";
+import { ACCESS, hasAccess, migrateNivelAcesso } from "@shared/mecarvit/access";
 
 const MOCK = true;
 const BCRYPT_ROUNDS = Number(process.env.BCRYPT_ROUNDS ?? 12);
@@ -92,14 +93,12 @@ const SERVICE_NAMES = [
 ];
 
 const CARGO_DEFS = [
-    { nome: "Gerente", nivelAcesso: "23456" },
-    { nome: "Mecânico", nivelAcesso: "34" },
-    { nome: "Consultor", nivelAcesso: "234" },
-    { nome: "Financeiro", nivelAcesso: "46" },
-    { nome: "Estoquista", nivelAcesso: "3" },
-    { nome: "Atendente", nivelAcesso: "23" },
-    { nome: "Auxiliar", nivelAcesso: "1" },
-    { nome: "Supervisor", nivelAcesso: "2345" }
+    { nome: "Consultor", nivelAcesso: migrateNivelAcesso("234") },
+    { nome: "Financeiro", nivelAcesso: migrateNivelAcesso("46") },
+    { nome: "Estoquista", nivelAcesso: migrateNivelAcesso("3") },
+    { nome: "Atendente", nivelAcesso: migrateNivelAcesso("23") },
+    { nome: "Auxiliar", nivelAcesso: migrateNivelAcesso("2") },
+    { nome: "Supervisor", nivelAcesso: migrateNivelAcesso("2345") }
 ] as const;
 
 const DIAGNOSTICOS_CLIENTE = [
@@ -312,14 +311,16 @@ export async function populateMock(): Promise<{ empresaId: number; created: bool
 
     const rng = createRng(SEED);
     const passwordHash = await bcrypt.hash(MOCK_STAFF_PASSWORD, BCRYPT_ROUNDS);
-    const cargoRows = await db
+    await db
         .insert(cargos)
         .values(CARGO_DEFS.map((cargo) => ({
             nome: cargo.nome,
             nivelAcesso: cargo.nivelAcesso,
             mock: MOCK
-        })))
-        .returning();
+        })));
+    const cargoRows = (await db.select().from(cargos)).filter(
+        (cargo) => cargo.nome !== "Superadmin"
+    );
     const cargoIds = cargoRows.map((row) => row.id);
     const staffCpfs: string[] = [];
     const mechanicCpfs: string[] = [];
@@ -358,7 +359,7 @@ export async function populateMock(): Promise<{ empresaId: number; created: bool
 
         staffCpfs.push(cpf);
 
-        if (cargo.nivelAcesso.includes("4") || cargo.nome === "Mecânico") {
+        if (hasAccess(cargo.nivelAcesso, ACCESS.OS) || cargo.nome === "Mecânico") {
             mechanicCpfs.push(cpf);
         }
 
@@ -512,11 +513,10 @@ export async function populateMock(): Promise<{ empresaId: number; created: bool
         const itens = chosenServices.map((servicoId) => ({
             servicoId,
             quantidade: 1 + Math.floor(rng() * 2),
-            valorObra: Number((80 + rng() * 420).toFixed(2)),
-            valorPecas: rng() > 0.35 ? Number((40 + rng() * 380).toFixed(2)) : null
+            valor: Number((80 + rng() * 420).toFixed(2))
         }));
         const total = itens.reduce((sum, item) => {
-            return sum + item.quantidade * (item.valorObra + (item.valorPecas ?? 0));
+            return sum + item.quantidade * item.valor;
         }, 0);
         const shouldFinance = statusOsId === STATUS_OS.CONCLUIDA || (statusOsId === STATUS_OS.EM_ANDAMENTO && rng() > 0.55);
         let regEntradaSaidaId: number | null = null;

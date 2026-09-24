@@ -45,7 +45,7 @@ describe("dados mock", () => {
             .expect(200);
 
         expect(login.body.data.usuario.email).toBe(MOCK_LOGIN.email);
-        expect(login.body.data.usuario.nivelAcesso).toContain("0");
+        expect(login.body.data.usuario.nivelAcesso).toContain("superadmin");
 
         await clearAllMockData();
 

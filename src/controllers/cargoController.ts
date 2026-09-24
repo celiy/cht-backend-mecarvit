@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { validateCargo } from "@shared/validators/mecarvit";
 import { catchAsync } from "../utils/catchAsync.js";
 import { ApiFeatures } from "../utils/ApiFeatures.js";
-import { parseId, requireDb } from "../utils/http.js";
+import { parseId, requireDb, requireUser } from "../utils/http.js";
 import { throwIfInvalid, bodyOf } from "../utils/validate.js";
 import { cargos } from "../db/schema/index.js";
 import * as cargoService from "../services/cargoService.js";
@@ -39,7 +39,7 @@ export const createCargo = catchAsync(async (req: Request, res: Response) => {
 
     const created = await cargoService.createCargo(requireDb(req), {
         nome: String(body.nome),
-        nivelAcesso: String(body.nivelAcesso)
+        nivelAcesso: body.nivelAcesso as string
     });
 
     notifyStaffCadastro(req, "cargo");
@@ -51,16 +51,21 @@ export const updateCargo = catchAsync(async (req: Request, res: Response) => {
 
     throwIfInvalid(validateCargo(body, { partial: req.method === "PATCH", allowZero: false }));
 
-    const updated = await cargoService.updateCargo(requireDb(req), parseId(req.params.id), {
-        nome: body.nome as string | undefined,
-        nivelAcesso: body.nivelAcesso === undefined ? undefined : String(body.nivelAcesso)
-    });
+    const updated = await cargoService.updateCargo(
+        requireDb(req),
+        parseId(req.params.id),
+        {
+            nome: body.nome as string | undefined,
+            nivelAcesso: body.nivelAcesso === undefined ? undefined : (body.nivelAcesso as string)
+        },
+        requireUser(req).nivelAcesso
+    );
 
     res.status(200).json({ data: updated });
 });
 
 export const deleteCargo = catchAsync(async (req: Request, res: Response) => {
-    await cargoService.deleteCargo(requireDb(req), parseId(req.params.id));
+    await cargoService.deleteCargo(requireDb(req), parseId(req.params.id), requireUser(req).nivelAcesso);
 
     res.status(204).send();
 });

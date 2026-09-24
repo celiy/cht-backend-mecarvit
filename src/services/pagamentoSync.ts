@@ -1,12 +1,28 @@
 import { eq } from "drizzle-orm";
 import type { AppDatabase } from "../config/database.js";
 import { pagamentos } from "../db/schema/index.js";
+import { AppError } from "../utils/AppError.js";
+import { PAYMENT_EPSILON } from "@shared/mecarvit/pagamentoSituacao";
 
 export type PagamentoInput = {
     id?: number;
     tipo: string;
     valor: number;
 };
+
+export function sumPagamentosInput(lista: PagamentoInput[]): number {
+    return lista.reduce((sum, row) => sum + Number(row.valor), 0);
+}
+
+export function assertPagamentosDentroDoValor(lista: PagamentoInput[], valorRegistro: number): void {
+    const soma = sumPagamentosInput(lista);
+
+    if (soma > Number(valorRegistro) + PAYMENT_EPSILON) {
+        throw new AppError("A soma dos pagamentos não pode ser maior que o valor do lançamento", 400, {
+            pagamentos: "A soma dos pagamentos não pode ser maior que o valor do lançamento"
+        });
+    }
+}
 
 /**
  * Replaces the payment list without rewriting untouched rows, so criadoEm stays

@@ -5,7 +5,7 @@ import { ACCESS } from "@shared/mecarvit/access";
 
 export const registroRouter = Router();
 
-registroRouter.use(requireAccess(ACCESS.OS));
+registroRouter.use(requireAccess(ACCESS.FINANCEIRO));
 
 registroRouter.route("/")
     .get(registroController.listRegistros)

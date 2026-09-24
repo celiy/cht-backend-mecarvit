@@ -1,6 +1,8 @@
 import type { Request, Response } from "express";
 import { validateOrdemServico } from "@shared/validators/mecarvit";
+import { PERMISSIONS, hasPermission } from "@shared/mecarvit/access";
 import { catchAsync } from "../utils/catchAsync.js";
+import { AppError } from "../utils/AppError.js";
 import { ApiFeatures } from "../utils/ApiFeatures.js";
 import { parseId, requireDb, requireUser } from "../utils/http.js";
 import { throwIfInvalid, bodyOf } from "../utils/validate.js";
@@ -186,7 +188,12 @@ export const listOrdens = catchAsync(async (req: Request, res: Response) => {
     const data = [];
 
     for (const row of rows) {
-        data.push(await ordemServicoService.getOrdemServico(db, Number(row.id)));
+        data.push(
+            ordemServicoService.presentOrdemServico(
+                await ordemServicoService.getOrdemServico(db, Number(row.id)),
+                requireUser(req).nivelAcesso
+            )
+        );
     }
 
     res.status(200).json({
@@ -200,10 +207,18 @@ export const listOrdens = catchAsync(async (req: Request, res: Response) => {
 export const getOs = catchAsync(async (req: Request, res: Response) => {
     const os = await ordemServicoService.getOrdemServico(requireDb(req), parseId(req.params.id));
 
-    res.status(200).json({ data: os });
+    res.status(200).json({
+        data: ordemServicoService.presentOrdemServico(os, requireUser(req).nivelAcesso)
+    });
 });
 
 export const createOs = catchAsync(async (req: Request, res: Response) => {
+    const actor = requireUser(req);
+
+    if (!hasPermission(actor.nivelAcesso, PERMISSIONS.os.criar)) {
+        throw new AppError("Permissão insuficiente", 403);
+    }
+
     const body = bodyOf(req);
 
     throwIfInvalid(validateOrdemServico(body, { partial: false }));
@@ -221,47 +236,72 @@ export const createOs = catchAsync(async (req: Request, res: Response) => {
         itens: asItens(body.itens),
         responsaveis: asResponsaveis(body.responsaveis),
         pagamentos: asPagamentos(body.pagamentos),
-        actorCpf: requireUser(req).cpf
+        actorCpf: actor.cpf
     });
 
-    res.status(201).json({ data: created });
+    res.status(201).json({
+        data: ordemServicoService.presentOrdemServico(created, actor.nivelAcesso)
+    });
 });
 
 export const updateOs = catchAsync(async (req: Request, res: Response) => {
+    const actor = requireUser(req);
     const body = bodyOf(req);
     const pagamentosOnly = isPagamentosOnlyBody(body);
+    const canCreate = hasPermission(actor.nivelAcesso, PERMISSIONS.os.criar);
+    const canPay = hasPermission(actor.nivelAcesso, PERMISSIONS.os.pagamentos);
+
+    if (pagamentosOnly && !canPay) {
+        throw new AppError("Permissão insuficiente", 403);
+    }
 
     throwIfInvalid(
         validateOrdemServico(body, {
-            partial: req.method === "PATCH" || pagamentosOnly
+            partial: req.method === "PATCH" || pagamentosOnly || !canCreate
         })
     );
 
+    const limited = !canCreate;
     const updated = await ordemServicoService.updateOrdemServico(
         requireDb(req),
         parseId(req.params.id),
-        {
-            clienteDocumento: body.clienteDocumento as string | undefined,
-            veiculoId: body.veiculoId === undefined ? undefined : Number(body.veiculoId),
-            statusOsId: body.statusOsId === undefined ? undefined : Number(body.statusOsId),
-            diagnosticoCliente: bodyOptionalString(body, "diagnosticoCliente"),
-            diagnosticoMecanico: bodyOptionalString(body, "diagnosticoMecanico"),
-            obs: bodyOptionalString(body, "obs", "observacao"),
-            dataInicio: bodyOptionalString(body, "dataInicio"),
-            dataConclusao: bodyOptionalString(body, "dataConclusao"),
-            dataLimitePagamento: bodyOptionalString(body, "dataLimitePagamento"),
-            itens: asItens(body.itens),
-            responsaveis: asResponsaveis(body.responsaveis),
-            pagamentos: asPagamentos(body.pagamentos),
-            replaceNested: req.method === "PUT",
-            actorCpf: requireUser(req).cpf
-        }
+        limited
+            ? {
+                diagnosticoMecanico: bodyOptionalString(body, "diagnosticoMecanico"),
+                obs: bodyOptionalString(body, "obs", "observacao"),
+                replaceNested: false,
+                actorCpf: actor.cpf
+            }
+            : {
+                clienteDocumento: body.clienteDocumento as string | undefined,
+                veiculoId: body.veiculoId === undefined ? undefined : Number(body.veiculoId),
+                statusOsId: body.statusOsId === undefined ? undefined : Number(body.statusOsId),
+                diagnosticoCliente: bodyOptionalString(body, "diagnosticoCliente"),
+                diagnosticoMecanico: bodyOptionalString(body, "diagnosticoMecanico"),
+                obs: bodyOptionalString(body, "obs", "observacao"),
+                dataInicio: bodyOptionalString(body, "dataInicio"),
+                dataConclusao: bodyOptionalString(body, "dataConclusao"),
+                dataLimitePagamento: bodyOptionalString(body, "dataLimitePagamento"),
+                itens: asItens(body.itens),
+                responsaveis: asResponsaveis(body.responsaveis),
+                pagamentos: canPay ? asPagamentos(body.pagamentos) : undefined,
+                replaceNested: req.method === "PUT",
+                actorCpf: actor.cpf
+            }
     );
 
-    res.status(200).json({ data: updated });
+    res.status(200).json({
+        data: ordemServicoService.presentOrdemServico(updated, actor.nivelAcesso)
+    });
 });
 
 export const deleteOs = catchAsync(async (req: Request, res: Response) => {
+    const actor = requireUser(req);
+
+    if (!hasPermission(actor.nivelAcesso, PERMISSIONS.os.excluir)) {
+        throw new AppError("Permissão insuficiente", 403);
+    }
+
     await ordemServicoService.deleteOrdemServico(requireDb(req), parseId(req.params.id));
 
     res.status(204).send();

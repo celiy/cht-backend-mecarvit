@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import type { AppDatabase } from "../config/database.js";
 import { ordensServico, pagamentos, registrosEntradaSaida, statusOs } from "../db/schema/index.js";
 import { AppError } from "../utils/AppError.js";
-import { replacePagamentos, type PagamentoInput } from "./pagamentoSync.js";
+import { replacePagamentos, assertPagamentosDentroDoValor, type PagamentoInput } from "./pagamentoSync.js";
 
 const PAYMENT_EPSILON = 0.009;
 
@@ -90,6 +90,7 @@ export async function createRegistro(
     }
 
     if (dto.pagamentos) {
+        assertPagamentosDentroDoValor(dto.pagamentos, Number(registro.valor));
         await replacePagamentos(db, registro.id, dto.pagamentos);
     }
 
@@ -166,6 +167,8 @@ export async function updateRegistro(
                 ...dto.pagamentos
             ];
 
+        const valorRegistro = dto.valor !== undefined ? Number(dto.valor) : Number(current.valor);
+        assertPagamentosDentroDoValor(merged, valorRegistro);
         await replacePagamentos(db, id, merged);
     }
 

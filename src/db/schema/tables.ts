@@ -152,8 +152,7 @@ export const ordensServico = sqliteTable("ordem_servico", {
 export const itensServico = sqliteTable("item_servico", {
     id: integer("id").primaryKey({ autoIncrement: true }),
     quantidade: integer("quantidade").notNull(),
-    valorPecas: real("valor_pecas"),
-    valorObra: real("valor_obra").notNull(),
+    valor: real("valor").notNull(),
     ordemServicoId: integer("ordem_servico_id")
         .notNull()
         .references(() => ordensServico.id, { onDelete: "cascade" }),
@@ -195,7 +194,8 @@ export const STATUS_OS = {
     PENDENTE: 2,
     EM_ANDAMENTO: 3,
     CONCLUIDA: 4,
-    CANCELADA: 5
+    CANCELADA: 5,
+    ORCAMENTO: 6
 } as const;
 
 export const STATUS_OS_NOMES = [
@@ -203,5 +203,6 @@ export const STATUS_OS_NOMES = [
     "pendente",
     "em andamento",
     "concluída",
-    "cancelada"
+    "cancelada",
+    "orçamento"
 ] as const;

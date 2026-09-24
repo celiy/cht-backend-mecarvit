@@ -144,6 +144,10 @@ export const updateUsuario = catchAsync(async (req: Request, res: Response) => {
     throwIfInvalid(validateUpdateUsuario(body));
     assertSelfEditableFields(isSelf, body);
 
+    if ((body.senha !== undefined || body.senhaInicial !== undefined) && !isSelf && !isSuperadmin(actor.nivelAcesso)) {
+        throw new AppError("Apenas o superadmin pode resetar a senha de funcionários", 403);
+    }
+
     const updated = await usuarioService.updateUsuario(db, targetCpf, {
         nome: body.nome as string | undefined,
         email: body.email as string | undefined,

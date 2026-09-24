@@ -347,7 +347,7 @@ describe("ordem de serviço, financeiro e dashboard", () => {
             .send({
                 clienteDocumento: ctx.documento,
                 veiculoId: ctx.veiculoId,
-                itens: [{ servicoId: ctx.servicoId, quantidade: 1, valorObra: 50 }]
+                itens: [{ servicoId: ctx.servicoId, quantidade: 1, valor: 50 }]
             })
             .expect(201);
 
@@ -367,6 +367,7 @@ describe("ordem de serviço, financeiro e dashboard", () => {
             .send({
                 clienteDocumento: ctx.documento,
                 veiculoId: ctx.veiculoId,
+                itens: [{ servicoId: ctx.servicoId, quantidade: 1, valor: 50 }],
                 pagamentos: [{ tipo: "dinheiro", valor: 10 }]
             })
             .expect(201);
