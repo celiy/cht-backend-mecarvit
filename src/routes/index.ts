@@ -1,7 +1,9 @@
 import { Router } from "express";
 import * as authController from "../controllers/authController.js";
+import * as systemOwnerController from "../controllers/systemOwnerController.js";
 import { protect } from "../middlewares/protect.js";
 import { requirePasswordChanged } from "../middlewares/requireAccess.js";
+import { requireSystemOwner } from "../middlewares/requireSystemOwner.js";
 import { usuarioRouter } from "./usuarioRoutes.js";
 import { cargoRouter } from "./cargoRoutes.js";
 import { empresaRouter } from "./empresaRoutes.js";
@@ -13,6 +15,12 @@ import { ordemServicoRouter, statusOsRouter } from "./ordemServicoRoutes.js";
 import { dashboardRouter, registroRouter } from "./registroRoutes.js";
 
 export const apiRouter = Router();
+
+apiRouter.use(requireSystemOwner);
+
+apiRouter.get("/system/status", systemOwnerController.status);
+apiRouter.post("/system/setup", systemOwnerController.setup);
+apiRouter.post("/system/login", systemOwnerController.login);
 
 apiRouter.post("/cadastro", authController.cadastro);
 apiRouter.post("/login", authController.login);

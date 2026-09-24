@@ -1,4 +1,7 @@
 import "dotenv/config";
+import { consumeInstallerOwnerSetup } from "./systemOwnerEnv.js";
+
+consumeInstallerOwnerSetup();
 
 export const JWT_SECRET_PLACEHOLDER = "change-me-please";
 
