@@ -5,6 +5,7 @@ export {
     PERMISSIONS,
     hasAccess,
     hasPermission,
+    isGerente,
     isPresetCargoName,
     isSuperadmin,
     migrateNivelAcesso,

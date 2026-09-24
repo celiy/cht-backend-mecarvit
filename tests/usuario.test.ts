@@ -172,14 +172,12 @@ describe("usuario, cargo e senha inicial", () => {
             .expect(200);
         const authed = reLogin.body.data.token as string;
 
-        // Salvar o próprio perfil é o fluxo da tela de perfil e não exige o dígito.
-        const perfil = await request(app)
+        // Sem gerente, o próprio perfil não pode ser alterado.
+        await request(app)
             .put(`/api/usuario/${func.cpf}`)
             .set(bearer(authed))
             .send({ nome: "Bruno Renomeado" })
-            .expect(200);
-
-        expect(perfil.body.data.nome).toBe("Bruno Renomeado");
+            .expect(403);
 
         // Editar outra pessoa continua exigindo FUNCIONARIOS.
         await request(app)

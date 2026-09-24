@@ -10,7 +10,6 @@ import {
 } from "../config/database.js";
 import { signToken } from "../utils/jwt.js";
 import { AppError } from "../utils/AppError.js";
-import { isSuperadmin } from "../utils/access.js";
 import * as usuarioService from "./usuarioService.js";
 import type { AuthUsuario, PublicUsuario } from "../entities/Usuario.js";
 
@@ -109,10 +108,8 @@ export async function login(dto: { email: string; senha: string; empresaId?: num
         matches.push({ empresaId, user });
     }
 
-    const gestores = matches.filter((item) => item.user && isSuperadmin(item.user.nivelAcesso));
-
-    if (gestores.length === 1 && gestores[0]?.user) {
-        const match = gestores[0];
+    if (matches.length === 1 && matches[0]?.user) {
+        const match = matches[0];
         const { senha: _senha, ...publicUser } = match.user;
         const token = signToken({
             sub: publicUser.cpf,
@@ -128,10 +125,17 @@ export async function login(dto: { email: string; senha: string; empresaId?: num
         };
     }
 
-    if (matches.length > 0) {
-        throw new AppError("Selecione a empresa para continuar", 400, {
-            empresaId: "empresaId é obrigatório para este usuário"
-        });
+    if (matches.length > 1) {
+        const locais = await listLocalEmpresas();
+        const ids = new Set(matches.map((item) => item.empresaId));
+        const empresas = locais.filter((empresa) => ids.has(empresa.id));
+
+        throw new AppError(
+            "Selecione a empresa para continuar",
+            400,
+            { empresaId: "empresaId é obrigatório para este usuário" },
+            empresas
+        );
     }
 
     throw new AppError("Credenciais inválidas", 401);

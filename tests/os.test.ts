@@ -60,7 +60,7 @@ describe("ordem de serviço, financeiro e dashboard", () => {
 
         expect(concluida.body.data.registroEntradaSaida).toBeTruthy();
         expect(concluida.body.data.registroEntradaSaida.tipo).toBe("entrada");
-        expect(concluida.body.data.registroEntradaSaida.nome).toContain("Cliente OS");
+        expect(concluida.body.data.registroEntradaSaida.nome).toMatch(/^\d{2}\/\d{2}\/\d{4} - #/);
         const resId = concluida.body.data.registroEntradaSaida.id as number;
 
         const pagamento1 = await request(app)
@@ -354,7 +354,10 @@ describe("ordem de serviço, financeiro e dashboard", () => {
         await request(app)
             .delete(`/api/ordem-servico/${comItens.body.data.id}`)
             .set(bearer(ctx.token))
-            .expect(409);
+            .expect(409)
+            .expect((res) => {
+                expect(res.body.error.fields.id).toMatch(/não pode ser excluída/i);
+            });
 
         await request(app)
             .get(`/api/ordem-servico/${comItens.body.data.id}`)

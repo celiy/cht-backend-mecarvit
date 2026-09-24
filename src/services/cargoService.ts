@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import type { AppDatabase } from "../config/database.js";
 import { cargos } from "../db/schema/index.js";
 import { AppError } from "../utils/AppError.js";
-import { isPresetCargoName, isSuperadmin, normalizeNivelAcesso } from "../utils/access.js";
+import { isPresetCargoName, isSuperadmin, isGerente, normalizeNivelAcesso, parsePermissions, PERMISSIONS } from "../utils/access.js";
 import { countUsuariosByCargo } from "./usuarioService.js";
 
 export async function listCargos(db: AppDatabase) {
@@ -20,8 +20,49 @@ export async function getCargo(db: AppDatabase, id: number) {
     return cargo;
 }
 
-export async function createCargo(db: AppDatabase, dto: { nome: string; nivelAcesso: unknown }) {
+function assertActorCanManageCargos(actorNivelAcesso?: string): void {
+    if (!actorNivelAcesso) {
+        return;
+    }
+
+    if (isSuperadmin(actorNivelAcesso) || isGerente(actorNivelAcesso)) {
+        return;
+    }
+
+    throw new AppError("Apenas o gerente ou o superadmin podem gerenciar cargos", 403);
+}
+
+function assertStaffWriteRequiresGerente(nivelAcesso: string): void {
+    const keys = parsePermissions(nivelAcesso);
+
+    if (keys.includes(PERMISSIONS.GERENTE) || isSuperadmin(nivelAcesso)) {
+        return;
+    }
+
+    const staffWrites = keys.filter(
+        (key) => key.startsWith("funcionarios.") && key !== PERMISSIONS.funcionarios.ver
+    );
+
+    if (staffWrites.length === 0) {
+        return;
+    }
+
+    throw new AppError("Somente um cargo de gerente pode gerenciar funcionários", 400, {
+        nivelAcesso: "Cargos comuns só podem visualizar funcionários"
+    });
+}
+
+export async function createCargo(
+    db: AppDatabase,
+    dto: { nome: string; nivelAcesso: unknown },
+    actorNivelAcesso?: string
+) {
+    assertActorCanManageCargos(actorNivelAcesso);
     const nivelAcesso = normalizeNivelAcesso(dto.nivelAcesso);
+
+    if (actorNivelAcesso && !isSuperadmin(actorNivelAcesso)) {
+        assertStaffWriteRequiresGerente(nivelAcesso);
+    }
 
     if (isSuperadmin(nivelAcesso)) {
         throw new AppError("nivelAcesso 0 é exclusivo do gestor fundador", 400, {
@@ -51,6 +92,7 @@ export async function updateCargo(
     dto: { nome?: string; nivelAcesso?: unknown },
     actorNivelAcesso?: string
 ) {
+    assertActorCanManageCargos(actorNivelAcesso);
     const current = await getCargo(db, id);
     const nextNivel =
         dto.nivelAcesso === undefined ? undefined : normalizeNivelAcesso(dto.nivelAcesso);
@@ -82,6 +124,9 @@ export async function updateCargo(
     }
 
     if (nextNivel !== undefined) {
+        if (actorNivelAcesso && !isSuperadmin(actorNivelAcesso)) {
+            assertStaffWriteRequiresGerente(nextNivel);
+        }
         patch.nivelAcesso = nextNivel;
     }
 
@@ -100,6 +145,7 @@ export async function updateCargo(
 }
 
 export async function deleteCargo(db: AppDatabase, id: number, actorNivelAcesso?: string) {
+    assertActorCanManageCargos(actorNivelAcesso);
     const current = await getCargo(db, id);
 
     if (

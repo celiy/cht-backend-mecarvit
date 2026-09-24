@@ -46,6 +46,12 @@ describe("situação de pagamento", () => {
         ).toBe(PAGAMENTO_SITUACAO.A_VENCER);
     });
 
+    it("é Não pago quando o valor do lançamento é zero", () => {
+        expect(pagamentoSituacao({ valor: 0, valorPago: 0, dataLimitePagamento: null, now })).toBe(
+            PAGAMENTO_SITUACAO.NAO_PAGO
+        );
+    });
+
     it("é Não pago sem prazo", () => {
         expect(pagamentoSituacao({ valor: 100, valorPago: 0, dataLimitePagamento: null, now })).toBe(
             PAGAMENTO_SITUACAO.NAO_PAGO
@@ -105,6 +111,7 @@ describe("regras de OS e pagamentos", () => {
         expect(orcamento.body.data.statusOsId).toBe(6);
         expect(orcamento.body.data.itens[0].valor).toBe(150);
         expect(orcamento.body.data.total).toBe(150);
+        expect(orcamento.body.data.pagamentoSituacao).toBeNull();
 
         const osId = orcamento.body.data.id as number;
 
@@ -168,6 +175,55 @@ describe("regras de OS e pagamentos", () => {
             .expect(201);
 
         expect(created.body.data.pagamentoSituacao).toBe(PAGAMENTO_SITUACAO.A_VENCER);
+    });
+
+    it("não permite mudar OS existente para orçamento e nomeia o lançamento com data e id", async () => {
+        const ctx = await seedOperacao();
+        const created = await request(app)
+            .post("/api/ordem-servico")
+            .set(bearer(ctx.token))
+            .send({
+                clienteDocumento: ctx.documento,
+                veiculoId: ctx.veiculoId,
+                itens: [{ servicoId: ctx.servicoId, quantidade: 1, valor: 80 }]
+            })
+            .expect(201);
+
+        const osId = created.body.data.id as number;
+
+        await request(app)
+            .patch(`/api/ordem-servico/${osId}`)
+            .set(bearer(ctx.token))
+            .send({ statusOsId: 6 })
+            .expect(409);
+
+        await request(app)
+            .patch(`/api/ordem-servico/${osId}`)
+            .set(bearer(ctx.token))
+            .send({ statusOsId: 4 })
+            .expect(200);
+
+        const got = await request(app)
+            .get(`/api/ordem-servico/${osId}`)
+            .set(bearer(ctx.token))
+            .expect(200);
+
+        expect(got.body.data.registroEntradaSaida.nome).toMatch(
+            new RegExp(`^\\d{2}/\\d{2}/\\d{4} - #${osId}$`)
+        );
+
+        const emptied = await request(app)
+            .put(`/api/ordem-servico/${osId}`)
+            .set(bearer(ctx.token))
+            .send({
+                clienteDocumento: ctx.documento,
+                veiculoId: ctx.veiculoId,
+                statusOsId: 3,
+                itens: []
+            })
+            .expect(200);
+
+        expect(emptied.body.data.pagamentoSituacao).toBe(PAGAMENTO_SITUACAO.NAO_PAGO);
     });
 });
 
@@ -282,5 +338,80 @@ describe("cargos pré-configurados e mecânico", () => {
             .expect(200);
 
         expect(patched.body.data.diagnosticoMecanico).toBe("Pastilha e disco");
+    });
+
+    it("usuário com edição de OS atualiza a OS e cargo comum não gerencia funcionários", async () => {
+        const created = await cadastrarOficina(app);
+        const token = created.token as string;
+        const osCargo = await criarCargo(app, token, JSON.stringify([
+            PERMISSIONS.os.ver,
+            PERMISSIONS.os.editar,
+            PERMISSIONS.os.criar,
+            PERMISSIONS.clientes.ver,
+            PERMISSIONS.veiculos.ver
+        ]), "OS operacional");
+        const staff = await criarFuncionario(app, token, osCargo.id, { nome: "Consultor OS" });
+        const documento = uniqueCpf();
+        const cliente = await request(app)
+            .post("/api/cliente")
+            .set(bearer(token))
+            .send({
+                documento,
+                nome: "Cliente OS Edit",
+                veiculos: [{ modelo: "Ka", placa: "OSE1234" }]
+            })
+            .expect(201);
+        const veiculoId = cliente.body.data.veiculos[0].id as number;
+        const os = await request(app)
+            .post("/api/ordem-servico")
+            .set(bearer(token))
+            .send({
+                clienteDocumento: documento,
+                veiculoId,
+                diagnosticoCliente: "Barulho",
+                itens: [{ servicoNome: "Revisão", quantidade: 1, valor: 40 }]
+            })
+            .expect(201);
+
+        await request(app)
+            .post(`/api/usuario/${staff.cpf}/senha`)
+            .set(bearer(token))
+            .send({ senhaAtual: staff.senha, senhaNova: SENHA_NOVA })
+            .expect(200);
+
+        const login = await request(app)
+            .post("/api/login")
+            .send({ email: staff.email, senha: SENHA_NOVA, empresaId: created.empresaId })
+            .expect(200);
+        const staffToken = login.body.data.token as string;
+
+        const updated = await request(app)
+            .put(`/api/ordem-servico/${os.body.data.id}`)
+            .set(bearer(staffToken))
+            .send({
+                clienteDocumento: documento,
+                veiculoId,
+                diagnosticoCliente: "Barulho",
+                diagnosticoMecanico: "Folga",
+                itens: [{ servicoNome: "Revisão", quantidade: 1, valor: 40 }]
+            })
+            .expect(200);
+
+        expect(updated.body.data.diagnosticoMecanico).toBe("Folga");
+
+        await request(app)
+            .post("/api/cargo")
+            .set(bearer(staffToken))
+            .send({
+                nome: "Cargo bloqueado",
+                nivelAcesso: JSON.stringify([PERMISSIONS.funcionarios.editar])
+            })
+            .expect(403);
+
+        await request(app)
+            .put(`/api/usuario/${staff.cpf}`)
+            .set(bearer(staffToken))
+            .send({ nome: "Nome novo" })
+            .expect(403);
     });
 });

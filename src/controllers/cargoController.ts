@@ -40,7 +40,7 @@ export const createCargo = catchAsync(async (req: Request, res: Response) => {
     const created = await cargoService.createCargo(requireDb(req), {
         nome: String(body.nome),
         nivelAcesso: body.nivelAcesso as string
-    });
+    }, requireUser(req).nivelAcesso);
 
     notifyStaffCadastro(req, "cargo");
     res.status(201).json({ data: created });

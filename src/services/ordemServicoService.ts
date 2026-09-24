@@ -16,6 +16,7 @@ import { AppError } from "../utils/AppError.js";
 import * as servicoService from "./servicoService.js";
 import { replacePagamentos, assertPagamentosDentroDoValor, type PagamentoInput } from "./pagamentoSync.js";
 import { pagamentoSituacao } from "@shared/mecarvit/pagamentoSituacao";
+import { formatDateBr } from "@shared/format/dateTime";
 import { hasPermission, PERMISSIONS } from "@shared/mecarvit/access";
 
 type ItemInput = {
@@ -204,7 +205,6 @@ async function syncFinanceiro(
         throw new AppError("Ordem de serviço não encontrada", 404);
     }
 
-    const cliente = await requireCliente(db, os.clienteDocumento);
     const itens = await loadItens(db, osId);
     const valor = Number(totalItens(itens).toFixed(2));
     const currentPagamentos = await loadPagamentos(db, os.regEntradaSaidaId);
@@ -252,7 +252,6 @@ async function syncFinanceiro(
     }
 
     const payload = {
-        nome: `OS de ${cliente.nome}`,
         tipo: "entrada" as const,
         valor,
         usuarioCpf: actorCpf,
@@ -262,12 +261,11 @@ async function syncFinanceiro(
     let resId = os.regEntradaSaidaId;
 
     if (!resId) {
-        // The deadline seeds the new record only. Once it exists, the record
-        // owns the value: editing it later must survive OS updates.
         const inserted = await db
             .insert(registrosEntradaSaida)
             .values({
                 ...payload,
+                nome: `${formatDateBr(os.criadoEm ?? os.dataInicio ?? new Date())} - #${osId}`,
                 dataLimitePagamento: os.dataLimitePagamento ?? null
             })
             .returning();
@@ -384,11 +382,13 @@ export async function getOrdemServico(db: AppDatabase, id: number) {
             ? { ...registro, pagamentos: pagamentoRows }
             : null,
         total,
-        pagamentoSituacao: pagamentoSituacao({
-            valor: registro ? Number(registro.valor) : total,
-            valorPago,
-            dataLimitePagamento: dataLimite
-        })
+        pagamentoSituacao: os.statusOsId === STATUS_OS.ORCAMENTO
+            ? null
+            : pagamentoSituacao({
+                valor: registro ? Number(registro.valor) : total,
+                valorPago,
+                dataLimitePagamento: dataLimite
+            })
     };
 }
 
@@ -424,6 +424,13 @@ function assertStatusTransition(
 ): void {
     const leavingConcluida = fromStatus === STATUS_OS.CONCLUIDA && toStatus !== STATUS_OS.CONCLUIDA;
     const cancelling = toStatus === STATUS_OS.CANCELADA && fromStatus !== STATUS_OS.CANCELADA;
+    const toOrcamento = toStatus === STATUS_OS.ORCAMENTO && fromStatus !== STATUS_OS.ORCAMENTO;
+
+    if (toOrcamento) {
+        throw new AppError("Não é possível alterar uma OS existente para orçamento", 409, {
+            statusOsId: "Orçamento só pode ser definido na criação da OS"
+        });
+    }
 
     if ((leavingConcluida || cancelling) && pagamentoCount > 0) {
         throw new AppError("Não é possível alterar o status de uma OS com pagamentos lançados", 409, {
@@ -469,12 +476,8 @@ export async function createOrdemServico(
             diagnosticoCliente: dto.diagnosticoCliente ?? null,
             diagnosticoMecanico: dto.diagnosticoMecanico ?? null,
             obs: dto.obs ?? null,
-            dataInicio: dto.dataInicio ? new Date(dto.dataInicio) : new Date(),
-            dataConclusao: statusOsId === STATUS_OS.CONCLUIDA
-                ? (dto.dataConclusao ? new Date(dto.dataConclusao) : new Date())
-                : dto.dataConclusao
-                    ? new Date(dto.dataConclusao)
-                    : null,
+            dataInicio: new Date(),
+            dataConclusao: statusOsId === STATUS_OS.CONCLUIDA ? new Date() : null,
             dataLimitePagamento: dto.dataLimitePagamento ? new Date(dto.dataLimitePagamento) : null
         })
         .returning();
@@ -550,14 +553,8 @@ export async function updateOrdemServico(
     if (dto.statusOsId !== undefined) {
         patch.statusOsId = dto.statusOsId;
         patch.dataConclusao = dto.statusOsId === STATUS_OS.CONCLUIDA
-            ? (dto.dataConclusao ? new Date(dto.dataConclusao) : new Date())
-            : dto.dataConclusao === undefined
-                ? null
-                : dto.dataConclusao
-                    ? new Date(dto.dataConclusao)
-                    : null;
-    } else if (dto.dataConclusao !== undefined) {
-        patch.dataConclusao = dto.dataConclusao ? new Date(dto.dataConclusao) : null;
+            ? (current.dataConclusao ? new Date(current.dataConclusao) : new Date())
+            : null;
     }
 
     if (dto.diagnosticoCliente !== undefined) {
@@ -570,10 +567,6 @@ export async function updateOrdemServico(
 
     if (dto.obs !== undefined) {
         patch.obs = dto.obs;
-    }
-
-    if (dto.dataInicio !== undefined) {
-        patch.dataInicio = dto.dataInicio ? new Date(dto.dataInicio) : null;
     }
 
     if (dto.dataLimitePagamento !== undefined) {
@@ -616,7 +609,7 @@ export async function deleteOrdemServico(db: AppDatabase, id: number) {
 
     if (temHistorico) {
         throw new AppError("Ordem de serviço com histórico operacional não pode ser excluída", 409, {
-            id: "OS com itens, pagamentos ou registro de entrada/saída permanece no banco"
+            id: "Uma OS com serviços ou com um registro de entrada atribuída à ela não pode ser excluída."
         });
     }
 

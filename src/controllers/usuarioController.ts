@@ -8,7 +8,7 @@ import { throwIfInvalid, bodyOf } from "../utils/validate.js";
 import { usuarios } from "../db/schema/index.js";
 import { ACCESS } from "@shared/mecarvit/access";
 import * as usuarioService from "../services/usuarioService.js";
-import { hasAccess, isSuperadmin } from "../utils/access.js";
+import { hasAccess, isGerente, isSuperadmin } from "../utils/access.js";
 import { notifyStaffCadastro } from "../realtime/mecarvitRealtime.js";
 import { ne } from "drizzle-orm";
 
@@ -144,6 +144,16 @@ export const updateUsuario = catchAsync(async (req: Request, res: Response) => {
     throwIfInvalid(validateUpdateUsuario(body));
     assertSelfEditableFields(isSelf, body);
 
+    if (isSelf && !isGerente(actor.nivelAcesso) && !isSuperadmin(actor.nivelAcesso)) {
+        const blockedProfile = ["nome", "email", "senha"].filter(
+            (field) => body[field] !== undefined
+        );
+
+        if (blockedProfile.length > 0) {
+            throw new AppError("Permissão insuficiente", 403);
+        }
+    }
+
     if ((body.senha !== undefined || body.senhaInicial !== undefined) && !isSelf && !isSuperadmin(actor.nivelAcesso)) {
         throw new AppError("Apenas o superadmin pode resetar a senha de funcionários", 403);
     }
@@ -167,6 +177,15 @@ export const changeSenha = catchAsync(async (req: Request, res: Response) => {
     const body = bodyOf(req);
 
     if (actor.cpf !== cpf && !hasAccess(actor.nivelAcesso, ACCESS.FUNCIONARIOS)) {
+        throw new AppError("Permissão insuficiente", 403);
+    }
+
+    if (
+        actor.cpf === cpf
+        && !actor.senhaInicial
+        && !isGerente(actor.nivelAcesso)
+        && !isSuperadmin(actor.nivelAcesso)
+    ) {
         throw new AppError("Permissão insuficiente", 403);
     }
 

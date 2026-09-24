@@ -112,6 +112,7 @@ export const globalErrorHandler: ErrorRequestHandler = (err, _req, res, _next) =
                 ? "Erro interno do servidor"
                 : appError.message,
             ...(appError.fields ? { fields: appError.fields } : {}),
+            ...(appError.empresas ? { empresas: appError.empresas } : {}),
         },
     };
 

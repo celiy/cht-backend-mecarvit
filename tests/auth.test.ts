@@ -101,6 +101,12 @@ describe("health e cadastro/login", () => {
             .expect(400);
 
         expect(ambiguous.body.error.fields.empresaId).toBeTruthy();
+        expect(ambiguous.body.error.empresas).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ id: first.empresaId }),
+                expect.objectContaining({ id: second.empresaId })
+            ])
+        );
 
         await request(app)
             .post("/api/login")
@@ -108,7 +114,7 @@ describe("health e cadastro/login", () => {
             .expect(200);
     });
 
-    it("funcionário precisa de empresaId no login", async () => {
+    it("funcionário único faz login sem empresaId", async () => {
         const oficina = await cadastrarOficina(app);
         const token = oficina.token as string;
         const cargo = await request(app)
@@ -128,10 +134,12 @@ describe("health e cadastro/login", () => {
             })
             .expect(201);
 
-        await request(app)
+        const loginWithoutEmpresa = await request(app)
             .post("/api/login")
             .send({ email: func.body.data.email, senha: SENHA })
-            .expect(400);
+            .expect(200);
+
+        expect(loginWithoutEmpresa.body.data.empresa.id).toBe(oficina.empresaId);
 
         const login = await request(app)
             .post("/api/login")
