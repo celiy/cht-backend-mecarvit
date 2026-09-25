@@ -42,6 +42,10 @@ function expandLoopbackOrigins(origins: string[]): string[] {
     return [...expanded];
 }
 
+/**
+ * Create the Express app.
+ * @returns The Express app.
+ */
 export function createApp(): Express {
     const app = express();
 
