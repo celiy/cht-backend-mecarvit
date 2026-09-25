@@ -8,6 +8,7 @@ import { requestContext } from "./middlewares/requestContext.js";
 import { sanitize } from "./middlewares/sanitize.js";
 import { notFound } from "./middlewares/notFound.js";
 import { globalErrorHandler } from "./middlewares/errorHandler.js";
+import { actionLogger } from "./middlewares/actionLogger.js";
 import { apiRouter } from "./routes/index.js";
 
 const LOOPBACK_HOSTNAMES = ["localhost", "127.0.0.1", "[::1]"];
@@ -60,7 +61,7 @@ export function createApp(): Express {
     const corsOrigins = expandLoopbackOrigins(env.corsOrigins);
     const corsOptions: CorsOptions = {
         origin: corsOrigins.length > 0 ? corsOrigins : true,
-        credentials: true,
+        credentials: true
     };
     app.use(cors(corsOptions));
 
@@ -69,8 +70,14 @@ export function createApp(): Express {
 
     app.use(express.static("public"));
 
-    app.get("/ip", (req, res) => { res.send(req.ip); });
-    app.get("/health", (_req, res) => { res.json({ status: "ok", at: new Date().toISOString() }); });
+    app.get("/ip", (req, res) => {
+        res.send(req.ip);
+    });
+    app.get("/health", (_req, res) => {
+        res.json({ status: "ok", at: new Date().toISOString() });
+    });
+
+    app.use(actionLogger);
 
     app.use("/api", apiRouter);
 

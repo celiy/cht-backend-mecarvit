@@ -18,7 +18,8 @@ export const listAuditLogsHandler = catchAsync(async (req: Request, res: Respons
         entity: typeof req.query.entity === "string" ? req.query.entity : undefined,
         from: typeof req.query.from === "string" ? req.query.from : undefined,
         to: typeof req.query.to === "string" ? req.query.to : undefined,
-        q: typeof req.query.q === "string" ? req.query.q : undefined
+        q: typeof req.query.q === "string" ? req.query.q : undefined,
+        sort: typeof req.query.sort === "string" ? req.query.sort : undefined
     });
 
     res.status(200).json(result);

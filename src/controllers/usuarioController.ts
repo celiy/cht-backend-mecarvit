@@ -5,13 +5,13 @@ import { AppError } from "../utils/AppError.js";
 import { ApiFeatures } from "../utils/ApiFeatures.js";
 import { defaultAtivoQuery, requireDb, requireUser } from "../utils/http.js";
 import { throwIfInvalid, bodyOf } from "../utils/validate.js";
-import { usuarios } from "../db/schema/index.js";
+import { usuarios, cargos } from "../db/schema/index.js";
 import { ACCESS } from "@shared/mecarvit/access";
 import * as usuarioService from "../services/usuarioService.js";
 import { hasAccess, isGerente, isSuperadmin } from "../utils/access.js";
 import { notifyStaffCadastro } from "../realtime/mecarvitRealtime.js";
 import { recordAudit } from "../utils/audit.js";
-import { ne } from "drizzle-orm";
+import { ne, sql } from "drizzle-orm";
 
 export const listUsuarios = catchAsync(async (req: Request, res: Response) => {
     const db = requireDb(req);
@@ -19,6 +19,9 @@ export const listUsuarios = catchAsync(async (req: Request, res: Response) => {
     const actorCpf = digitsOnly(actor.cpf);
     const features = new ApiFeatures(db, usuarios, defaultAtivoQuery(req.query as Record<string, unknown>))
         .filter()
+        .sortAlias({
+            cargoNome: sql`(select lower(${cargos.nome}) from ${cargos} where ${cargos.id} = ${usuarios.cargoId})`
+        })
         .sort()
         .limitFields()
         .paginate();

@@ -57,6 +57,8 @@ export type AuditListQuery = {
     from?: string;
     to?: string;
     q?: string;
+    /** ApiFeatures-style: `field` or `-field` (comma-separated). */
+    sort?: string;
 };
 
 const SENSITIVE_KEY_PATTERN =
@@ -310,7 +312,27 @@ export function listAuditLogs(
         }
     }
 
-    collected.sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
+    collected.sort((a, b) => {
+        const sortRaw = query.sort?.trim();
+
+        if (!sortRaw) {
+            return b.occurredAt.localeCompare(a.occurredAt);
+        }
+
+        for (const token of sortRaw.split(",").map((part) => part.trim()).filter(Boolean)) {
+            const descending = token.startsWith("-");
+            const field = (descending ? token.slice(1) : token) as keyof AuditLogEntry;
+            const left = String(a[field] ?? "");
+            const right = String(b[field] ?? "");
+            const cmp = left.localeCompare(right, "pt-BR", { numeric: true, sensitivity: "base" });
+
+            if (cmp !== 0) {
+                return descending ? -cmp : cmp;
+            }
+        }
+
+        return 0;
+    });
 
     const total = collected.length;
     const start = (page - 1) * limit;

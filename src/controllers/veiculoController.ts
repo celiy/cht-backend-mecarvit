@@ -4,10 +4,11 @@ import { catchAsync } from "../utils/catchAsync.js";
 import { ApiFeatures } from "../utils/ApiFeatures.js";
 import { parseId, requireDb } from "../utils/http.js";
 import { throwIfInvalid, bodyOf } from "../utils/validate.js";
-import { veiculos } from "../db/schema/index.js";
+import { veiculos, clientes } from "../db/schema/index.js";
 import * as veiculoService from "../services/veiculoService.js";
 import { notifyStaffCadastro } from "../realtime/mecarvitRealtime.js";
 import { recordAudit } from "../utils/audit.js";
+import { sql } from "drizzle-orm";
 
 function parseKilometragemBody(value: unknown): number | null | undefined {
     if (value === undefined) {
@@ -25,6 +26,9 @@ export const listVeiculos = catchAsync(async (req: Request, res: Response) => {
     const db = requireDb(req);
     const features = new ApiFeatures(db, veiculos, req.query as Record<string, unknown>)
         .filter()
+        .sortAlias({
+            clienteNome: sql`(select lower(${clientes.nome}) from ${clientes} where ${clientes.documento} = ${veiculos.clienteDocumento})`
+        })
         .sort()
         .limitFields()
         .paginate();

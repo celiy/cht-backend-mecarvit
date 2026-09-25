@@ -13,6 +13,7 @@ import { eq, inArray, isNull, like, or, sql, and, gte, lte, type SQL } from "dri
 import { utcDayRange } from "../utils/utcDayRange.js";
 import { recordAudit } from "../utils/audit.js";
 import { parsePagamentoSituacaoFilter } from "@shared/mecarvit/pagamentoSituacao";
+import { osPagamentoBadgeSortSql } from "../utils/pagamentoSituacaoSortSql.js";
 
 function canEditFinanceiro(nivelAcesso: string): boolean {
     return (
@@ -69,6 +70,13 @@ export const listOrdens = catchAsync(async (req: Request, res: Response) => {
 
     const features = new ApiFeatures(db, ordensServico, query)
         .filter()
+        .sortAlias({
+            idLabel: ordensServico.id,
+            clienteNome: sql`(select lower(${clientes.nome}) from ${clientes} where ${clientes.documento} = ${ordensServico.clienteDocumento})`,
+            veiculoLabel: sql`(select lower(${veiculos.modelo} || ' ' || coalesce(${veiculos.placa}, '')) from ${veiculos} where ${veiculos.id} = ${ordensServico.veiculoId})`,
+            statusBadge: sql`(select lower(${statusOs.nome}) from ${statusOs} where ${statusOs.id} = ${ordensServico.statusOsId})`,
+            pagamentoBadge: osPagamentoBadgeSortSql()
+        })
         .sort()
         .limitFields()
         .paginate();

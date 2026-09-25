@@ -5,12 +5,13 @@ import { ApiFeatures } from "../utils/ApiFeatures.js";
 import { parseId, requireDb, requireUser } from "../utils/http.js";
 import { throwIfInvalid, bodyOf } from "../utils/validate.js";
 import { utcDayRange } from "../utils/utcDayRange.js";
-import { ordensServico, registrosEntradaSaida } from "../db/schema/index.js";
+import { ordensServico, registrosEntradaSaida, pagamentos } from "../db/schema/index.js";
 import * as registroService from "../services/registroService.js";
 import { AppError } from "../utils/AppError.js";
 import { asPagamentos, isPagamentosOnlyBody } from "../utils/nested.js";
-import { inArray, and, gte, lte, type SQL } from "drizzle-orm";
+import { inArray, and, gte, lte, sql, type SQL } from "drizzle-orm";
 import { parsePagamentoSituacaoFilter } from "@shared/mecarvit/pagamentoSituacao";
+import { registroPagamentoBadgeSortSql } from "../utils/pagamentoSituacaoSortSql.js";
 
 function queryStringValue(query: Record<string, unknown>, key: string): string | undefined {
     const raw = query[key];
@@ -40,6 +41,11 @@ export const listRegistros = catchAsync(async (req: Request, res: Response) => {
 
     const features = new ApiFeatures(db, registrosEntradaSaida, query)
         .filter()
+        .sortAlias({
+            valorLabel: registrosEntradaSaida.valor,
+            pagoLabel: sql`(select coalesce(sum(${pagamentos.valor}), 0) from ${pagamentos} where ${pagamentos.regEntradaSaidaId} = ${registrosEntradaSaida.id})`,
+            pagamentoBadge: registroPagamentoBadgeSortSql()
+        })
         .sort()
         .limitFields()
         .paginate();

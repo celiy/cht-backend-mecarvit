@@ -132,6 +132,8 @@ interface PaginateInfo {
  *   ?fields=a,b,c                      -> column projection
  *   ?page=1&limit=10                   -> pagination with defaults 1 / 10
  *
+ * Use `.sortAlias({ uiField: sql`...` })` before `.sort()` for joined / computed keys.
+
  * Typical usage:
  *
  *   const features = new ApiFeatures(db, users, req.query)
@@ -148,6 +150,7 @@ export class ApiFeatures<TTable extends SQLiteTable> {
 
     private whereConds: SQL[] = [];
     private orderBy: SQL[] = [];
+    private sortExtras: Record<string, AnyColumn | SQL> = {};
     private projection: Record<string, AnyColumn> | null = null;
     private paginateInfo: PaginateInfo | null = null;
 
@@ -264,11 +267,21 @@ export class ApiFeatures<TTable extends SQLiteTable> {
         for (const token of sortRaw.split(",").map(s => s.trim()).filter(Boolean)) {
             const descending = token.startsWith("-");
             const fieldName = descending ? token.slice(1) : token;
-            const column = getColumn(this.columns, fieldName);
+            const column = getColumn(this.columns, fieldName) ?? this.sortExtras[fieldName] ?? null;
             if (!column) continue;
 
             this.orderBy.push(descending ? desc(column) : asc(column));
         }
+
+        return this;
+    }
+
+    /**
+     * Registers non-table sort keys (joined / computed expressions) for `?sort=`.
+     * Call before `.sort()`.
+     */
+    sortAlias(extras: Record<string, AnyColumn | SQL>): this {
+        this.sortExtras = { ...this.sortExtras, ...extras };
 
         return this;
     }
