@@ -262,14 +262,129 @@ function phone(rng: Rng): string {
     return `${ddd}9${String(80000000 + Math.floor(rng() * 19999999)).slice(-8)}`;
 }
 
+function startOfLocalDay(date: Date): Date {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0, 0);
+}
+
+function addLocalDays(date: Date, days: number): Date {
+    const next = new Date(date);
+
+    next.setDate(next.getDate() + days);
+
+    return startOfLocalDay(next);
+}
+
+function mondayOfWeek(now = new Date()): Date {
+    const today = startOfLocalDay(now);
+    const day = today.getDay();
+    const mondayOffset = day === 0 ? -6 : 1 - day;
+
+    return addLocalDays(today, mondayOffset);
+}
+
+function randomBetween(rng: Rng, start: Date, end: Date): Date {
+    const a = start.getTime();
+    const b = end.getTime();
+    const lo = Math.min(a, b);
+    const hi = Math.max(a, b);
+
+    if (hi <= lo) {
+        return startOfLocalDay(new Date(lo));
+    }
+
+    return startOfLocalDay(new Date(lo + rng() * (hi - lo)));
+}
+
 function daysAgo(rng: Rng, min: number, max: number): Date {
     const days = min + Math.floor(rng() * (max - min + 1));
-    const date = new Date();
 
-    date.setUTCDate(date.getUTCDate() - days);
-    date.setUTCHours(12, 0, 0, 0);
+    return addLocalDays(new Date(), -days);
+}
 
-    return date;
+function daysFromNow(rng: Rng, min: number, max: number): Date {
+    const days = min + Math.floor(rng() * (max - min + 1));
+
+    return addLocalDays(new Date(), days);
+}
+
+/**
+ * Event dates mixed across ~2 years, current month, and a light current-week slice.
+ */
+function mockEventDate(rng: Rng, now = new Date()): Date {
+    const today = startOfLocalDay(now);
+    const weekStart = mondayOfWeek(now);
+    const weekEnd = addLocalDays(weekStart, 6);
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1, 12, 0, 0, 0);
+    const roll = rng();
+
+    if (roll < 0.08) {
+        return randomBetween(rng, weekStart, today);
+    }
+
+    if (roll < 0.18) {
+        return randomBetween(rng, monthStart, today);
+    }
+
+    if (roll < 0.55) {
+        return daysAgo(rng, 0, 180);
+    }
+
+    if (roll < 0.85) {
+        return daysAgo(rng, 180, 900);
+    }
+
+    if (roll < 0.92) {
+        return randomBetween(rng, today, weekEnd);
+    }
+
+    return daysFromNow(rng, 1, 180);
+}
+
+/** Deadlines for a vencer / atrasado / null (Não pago). */
+function mockDeadline(rng: Rng, now = new Date()): Date | null {
+    const today = startOfLocalDay(now);
+    const weekEnd = addLocalDays(mondayOfWeek(now), 6);
+    const roll = rng();
+
+    if (roll < 0.12) {
+        return null;
+    }
+
+    // Recent past (incl. days before Monday) → atrasado visível em "esta semana".
+    if (roll < 0.32) {
+        return daysAgo(rng, 1, 6);
+    }
+
+    if (roll < 0.48) {
+        return daysAgo(rng, 7, 120);
+    }
+
+    if (roll < 0.78) {
+        return randomBetween(rng, today, weekEnd);
+    }
+
+    return daysFromNow(rng, 1, 240);
+}
+
+/**
+ * Payment dates spread evenly across the last 12 months (avoids current-month spikes
+ * in monthly charts). Small slice stays in the current week for card filters.
+ */
+function mockPaidAt(rng: Rng, now = new Date()): Date {
+    const today = startOfLocalDay(now);
+    const weekStart = mondayOfWeek(now);
+    const roll = rng();
+
+    if (roll < 0.08) {
+        return randomBetween(rng, weekStart, today);
+    }
+
+    const monthsBack = Math.floor(rng() * 12);
+    const monthStart = new Date(today.getFullYear(), today.getMonth() - monthsBack, 1, 12, 0, 0, 0);
+    const monthEnd = new Date(today.getFullYear(), today.getMonth() - monthsBack + 1, 0, 12, 0, 0, 0);
+    const end = monthEnd.getTime() > today.getTime() ? today : monthEnd;
+
+    return randomBetween(rng, monthStart, end);
 }
 
 async function listMockOnlyCompanies(): Promise<Array<{ empresaId: number; db: AppDatabase }>> {
@@ -519,7 +634,9 @@ async function fillMockCompany(
         STATUS_OS.CONCLUIDA,
         STATUS_OS.CONCLUIDA,
         STATUS_OS.CONCLUIDA,
-        STATUS_OS.CANCELADA
+        STATUS_OS.CANCELADA,
+        STATUS_OS.ORCAMENTO,
+        STATUS_OS.ORCAMENTO
     ] as const;
 
     for (let index = 0; index < MOCK_COUNTS.orders; index += 1) {
@@ -530,9 +647,13 @@ async function fillMockCompany(
         }
 
         const statusOsId = pick(rng, statusWeights);
-        const dataInicio = daysAgo(rng, 2, 400);
+        const dataInicio = mockEventDate(rng);
+        const criadoEm = dataInicio;
+        const modificadoEm = rng() < 0.4
+            ? mockEventDate(rng)
+            : criadoEm;
         const dataConclusao = statusOsId === STATUS_OS.CONCLUIDA || statusOsId === STATUS_OS.CANCELADA
-            ? new Date(dataInicio.getTime() + (2 + Math.floor(rng() * 12)) * 86400000)
+            ? addLocalDays(dataInicio, 2 + Math.floor(rng() * 12))
             : null;
         const itemCount = 1 + Math.floor(rng() * 3);
         const chosenServices = pickN(rng, servicoIds, itemCount);
@@ -544,19 +665,39 @@ async function fillMockCompany(
         const total = itens.reduce((sum, item) => {
             return sum + item.quantidade * item.valor;
         }, 0);
-        const shouldFinance = statusOsId === STATUS_OS.CONCLUIDA || (statusOsId === STATUS_OS.EM_ANDAMENTO && rng() > 0.55);
+        const shouldFinance =
+            statusOsId !== STATUS_OS.ORCAMENTO
+            && statusOsId !== STATUS_OS.CANCELADA
+            && (statusOsId === STATUS_OS.CONCLUIDA || rng() > 0.25);
         let regEntradaSaidaId: number | null = null;
+        // Null deadline + unpaid → "Não pago" (pagamentoSituacao).
+        let dataLimitePagamento: Date | null = statusOsId === STATUS_OS.ORCAMENTO
+            ? null
+            : mockDeadline(rng);
 
         if (shouldFinance) {
+            const payRoll = rng();
+            const paid =
+                payRoll < 0.5
+                    ? Number(total.toFixed(2))
+                    : payRoll < 0.75
+                        ? Number((total * (0.25 + rng() * 0.5)).toFixed(2))
+                        : 0;
+            // Unpaid with no deadline → Não pago; unpaid with deadline → a vencer/atrasado.
+            const deadline = paid > 0
+                ? (dataLimitePagamento ?? mockDeadline(rng) ?? daysFromNow(rng, 1, 30))
+                : dataLimitePagamento;
             const registro = await db
                 .insert(registrosEntradaSaida)
                 .values({
                     nome: `OS mock ${index + 1}`,
                     descricao: "Receita gerada pela ordem de serviço mock.",
-                    dataLimitePagamento: dataConclusao ?? daysAgo(rng, 0, 20),
+                    dataLimitePagamento: deadline,
                     tipo: "entrada",
                     valor: Number(total.toFixed(2)),
                     usuarioCpf: pick(rng, actorCpfs),
+                    criadoEm,
+                    modificadoEm,
                     mock: MOCK
                 })
                 .returning();
@@ -564,17 +705,20 @@ async function fillMockCompany(
 
             if (registroId !== undefined) {
                 regEntradaSaidaId = registroId;
+                dataLimitePagamento = deadline;
 
-                const paid = statusOsId === STATUS_OS.CONCLUIDA
-                    ? Number(total.toFixed(2))
-                    : Number((total * (0.3 + rng() * 0.4)).toFixed(2));
+                if (paid > 0) {
+                    const paidAt = mockPaidAt(rng);
 
-                await db.insert(pagamentos).values({
-                    tipo: pick(rng, PAGAMENTO_TIPOS),
-                    valor: paid,
-                    regEntradaSaidaId: registroId,
-                    mock: MOCK
-                });
+                    await db.insert(pagamentos).values({
+                        tipo: pick(rng, PAGAMENTO_TIPOS),
+                        valor: paid,
+                        regEntradaSaidaId: registroId,
+                        criadoEm: paidAt,
+                        modificadoEm: paidAt,
+                        mock: MOCK
+                    });
+                }
             }
         }
 
@@ -583,13 +727,18 @@ async function fillMockCompany(
             .values({
                 dataInicio,
                 dataConclusao,
+                dataLimitePagamento: regEntradaSaidaId ? null : dataLimitePagamento,
                 diagnosticoCliente: pick(rng, DIAGNOSTICOS_CLIENTE),
-                diagnosticoMecanico: statusOsId === STATUS_OS.ABERTA ? null : pick(rng, DIAGNOSTICOS_MECANICO),
+                diagnosticoMecanico: statusOsId === STATUS_OS.ABERTA || statusOsId === STATUS_OS.ORCAMENTO
+                    ? null
+                    : pick(rng, DIAGNOSTICOS_MECANICO),
                 obs: index % 8 === 0 ? "Aguardando peça de retrabalho." : null,
                 veiculoId: veiculo.id,
                 clienteDocumento: veiculo.clienteDocumento,
                 regEntradaSaidaId,
                 statusOsId,
+                criadoEm,
+                modificadoEm,
                 mock: MOCK
             })
             .returning();
@@ -622,15 +771,19 @@ async function fillMockCompany(
     for (let index = 0; index < MOCK_COUNTS.extraFinance; index += 1) {
         const template = pick(rng, EXTRA_FINANCE);
         const valor = Number((template.valor * (0.7 + rng() * 0.8)).toFixed(2));
+        const criadoEm = mockEventDate(rng);
+        const deadline = mockDeadline(rng);
         const registro = await db
             .insert(registrosEntradaSaida)
             .values({
                 nome: `${template.nome} ${index + 1}`,
                 descricao: "Lançamento financeiro mock da oficina.",
-                dataLimitePagamento: daysAgo(rng, 0, 90),
+                dataLimitePagamento: deadline,
                 tipo: template.tipo,
                 valor,
                 usuarioCpf: pick(rng, actorCpfs),
+                criadoEm,
+                modificadoEm: criadoEm,
                 mock: MOCK
             })
             .returning();
@@ -640,11 +793,157 @@ async function fillMockCompany(
             continue;
         }
 
-        if (rng() > 0.25) {
+        const payRoll = rng();
+
+        if (payRoll > 0.18) {
+            const paidAt = mockPaidAt(rng);
+            const paidValor =
+                payRoll > 0.5 ? valor : Number((valor * (0.3 + rng() * 0.5)).toFixed(2));
+
             await db.insert(pagamentos).values({
                 tipo: pick(rng, PAGAMENTO_TIPOS),
-                valor: rng() > 0.3 ? valor : Number((valor * 0.5).toFixed(2)),
+                valor: paidValor,
                 regEntradaSaidaId: registroId,
+                criadoEm: paidAt,
+                modificadoEm: paidAt,
+                mock: MOCK
+            });
+        }
+    }
+
+    // Guaranteed burst for current dashboard windows (esta_semana / este_mes never empty).
+    await seedDashboardBurst(db, rng, actorCpfs);
+}
+
+/**
+ * Guaranteed slices for card filters + evenly spread paid history for monthly charts.
+ * Avoid dumping a huge paid pile into the current month.
+ */
+async function seedDashboardBurst(
+    db: AppDatabase,
+    rng: Rng,
+    actorCpfs: string[]
+): Promise<void> {
+    const now = new Date();
+    const today = startOfLocalDay(now);
+    const weekStart = mondayOfWeek(now);
+    const weekEnd = addLocalDays(weekStart, 6);
+    const burst: Array<{
+        tipo: "entrada" | "saida";
+        nome: string;
+        valor: number;
+        deadline: Date | null;
+        paid: boolean;
+        paidAt?: Date;
+        criadoEm: Date;
+    }> = [];
+
+    // Modest paid volume this week (cards), small valores.
+    for (let i = 0; i < 16; i += 1) {
+        const tipo = i % 2 === 0 ? "entrada" : "saida";
+        const paidAt = randomBetween(rng, weekStart, today);
+
+        burst.push({
+            tipo,
+            nome: `Burst pago semana ${tipo} ${i + 1}`,
+            valor: Number((120 + rng() * 480).toFixed(2)),
+            deadline: paidAt,
+            paid: true,
+            paidAt,
+            criadoEm: paidAt
+        });
+    }
+
+    // Paid history: ~14 lançamentos / mês × 12 meses (charts stay balanced).
+    for (let monthsBack = 0; monthsBack < 12; monthsBack += 1) {
+        const monthStart = new Date(today.getFullYear(), today.getMonth() - monthsBack, 1, 12, 0, 0, 0);
+        const monthEnd = new Date(today.getFullYear(), today.getMonth() - monthsBack + 1, 0, 12, 0, 0, 0);
+        const end = monthEnd.getTime() > today.getTime() ? today : monthEnd;
+
+        for (let i = 0; i < 14; i += 1) {
+            const tipo = i % 2 === 0 ? "entrada" : "saida";
+            const paidAt = randomBetween(rng, monthStart, end);
+
+            burst.push({
+                tipo,
+                nome: `Burst pago mês-${monthsBack} ${tipo} ${i + 1}`,
+                valor: Number((180 + rng() * 720).toFixed(2)),
+                deadline: paidAt,
+                paid: true,
+                paidAt,
+                criadoEm: paidAt
+            });
+        }
+    }
+
+    for (let i = 0; i < 36; i += 1) {
+        const tipo = i % 2 === 0 ? "entrada" : "saida";
+
+        burst.push({
+            tipo,
+            nome: `Burst a vencer ${tipo} ${i + 1}`,
+            valor: Number((150 + rng() * 900).toFixed(2)),
+            deadline: randomBetween(rng, today, weekEnd),
+            paid: false,
+            criadoEm: randomBetween(rng, weekStart, today)
+        });
+    }
+
+    // Always past 1–6 days → atrasado even on Monday (pairs with deadlinePeriodRange).
+    for (let i = 0; i < 48; i += 1) {
+        const tipo = i % 2 === 0 ? "entrada" : "saida";
+
+        burst.push({
+            tipo,
+            nome: `Burst atrasado ${tipo} ${i + 1}`,
+            valor: Number((160 + rng() * 980).toFixed(2)),
+            deadline: daysAgo(rng, 1, 6),
+            paid: false,
+            criadoEm: daysAgo(rng, 10, 90)
+        });
+    }
+
+    for (let i = 0; i < 36; i += 1) {
+        const tipo = i % 2 === 0 ? "entrada" : "saida";
+
+        burst.push({
+            tipo,
+            nome: `Burst não pago ${tipo} ${i + 1}`,
+            valor: Number((120 + rng() * 800).toFixed(2)),
+            deadline: null,
+            paid: false,
+            criadoEm: mockEventDate(rng, now)
+        });
+    }
+
+    for (const item of burst) {
+        const registro = await db
+            .insert(registrosEntradaSaida)
+            .values({
+                nome: item.nome,
+                descricao: "Lançamento forçado para popular filtros do dashboard.",
+                dataLimitePagamento: item.deadline,
+                tipo: item.tipo,
+                valor: item.valor,
+                usuarioCpf: pick(rng, actorCpfs),
+                criadoEm: item.criadoEm,
+                modificadoEm: item.criadoEm,
+                mock: MOCK
+            })
+            .returning();
+        const registroId = registro[0]?.id;
+
+        if (registroId === undefined) {
+            continue;
+        }
+
+        if (item.paid && item.paidAt) {
+            await db.insert(pagamentos).values({
+                tipo: pick(rng, PAGAMENTO_TIPOS),
+                valor: item.valor,
+                regEntradaSaidaId: registroId,
+                criadoEm: item.paidAt,
+                modificadoEm: item.paidAt,
                 mock: MOCK
             });
         }

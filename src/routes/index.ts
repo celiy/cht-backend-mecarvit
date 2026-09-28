@@ -10,7 +10,8 @@ import { enderecoRouter } from "./enderecoRoutes.js";
 import { veiculoRouter } from "./veiculoRoutes.js";
 import { servicoRouter } from "./servicoRoutes.js";
 import { ordemServicoRouter, statusOsRouter } from "./ordemServicoRoutes.js";
-import { dashboardRouter, registroRouter } from "./registroRoutes.js";
+import { registroRouter } from "./registroRoutes.js";
+import { dashboardRouter } from "./dashboardRoutes.js";
 import { auditLogRouter } from "./auditLogRoutes.js";
 
 export const apiRouter = Router();

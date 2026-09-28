@@ -7,7 +7,6 @@ import { throwIfInvalid, bodyOf } from "../utils/validate.js";
 import { utcDayRange } from "../utils/utcDayRange.js";
 import { ordensServico, registrosEntradaSaida, pagamentos } from "../db/schema/index.js";
 import * as registroService from "../services/registroService.js";
-import { AppError } from "../utils/AppError.js";
 import { asPagamentos, isPagamentosOnlyBody } from "../utils/nested.js";
 import { inArray, and, gte, lte, sql, type SQL } from "drizzle-orm";
 import { parsePagamentoSituacaoFilter } from "@shared/mecarvit/pagamentoSituacao";
@@ -193,23 +192,4 @@ export const deleteRegistro = catchAsync(async (req: Request, res: Response) => 
     await registroService.deleteRegistro(requireDb(req), parseId(req.params.id));
 
     res.status(204).send();
-});
-
-export const dashboardOsStatus = catchAsync(async (req: Request, res: Response) => {
-    const data = await registroService.resumoOsStatus(requireDb(req));
-
-    res.status(200).json({ data });
-});
-
-export const dashboardFluxoMensal = catchAsync(async (req: Request, res: Response) => {
-    const raw = req.query.ano;
-    const ano = raw === undefined ? new Date().getFullYear() : Number(raw);
-
-    if (!Number.isInteger(ano) || ano < 1900 || ano > 2100) {
-        throw new AppError("ano inválido", 400, { ano: "ano deve ser um inteiro válido" });
-    }
-
-    const data = await registroService.fluxoMensal(requireDb(req), ano);
-
-    res.status(200).json({ data });
 });

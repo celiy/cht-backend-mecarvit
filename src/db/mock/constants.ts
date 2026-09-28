@@ -28,9 +28,9 @@ export const MOCK_SHARED_STAFF = [
 ] as const;
 
 export const MOCK_COUNTS = {
-    staff: 36,
-    clients: 52,
-    services: 18,
-    extraFinance: 40,
-    orders: 110
+    staff: 48,
+    clients: 220,
+    services: 24,
+    extraFinance: 600,
+    orders: 900
 } as const;

@@ -16,8 +16,3 @@ registroRouter.route("/:id")
     .put(registroController.updateRegistro)
     .patch(registroController.updateRegistro)
     .delete(registroController.deleteRegistro);
-
-export const dashboardRouter = Router();
-
-dashboardRouter.get("/os-status", registroController.dashboardOsStatus);
-dashboardRouter.get("/fluxo-mensal", registroController.dashboardFluxoMensal);

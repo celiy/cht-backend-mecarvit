@@ -1,6 +1,6 @@
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { AppDatabase } from "../config/database.js";
-import { ordensServico, pagamentos, registrosEntradaSaida, statusOs } from "../db/schema/index.js";
+import { ordensServico, pagamentos, registrosEntradaSaida } from "../db/schema/index.js";
 import { AppError } from "../utils/AppError.js";
 import { replacePagamentos, assertPagamentosDentroDoValor, type PagamentoInput } from "./pagamentoSync.js";
 import {
@@ -185,60 +185,4 @@ export async function deleteRegistro(db: AppDatabase, id: number) {
     await db.delete(registrosEntradaSaida).where(eq(registrosEntradaSaida.id, id));
 
     return current;
-}
-
-export async function resumoOsStatus(db: AppDatabase) {
-    const statuses = await db.select().from(statusOs);
-    const counts = await db
-        .select({
-            statusOsId: ordensServico.statusOsId,
-            total: sql<number>`count(*)`
-        })
-        .from(ordensServico)
-        .groupBy(ordensServico.statusOsId);
-    const byId = new Map(counts.map((row) => [row.statusOsId, Number(row.total)]));
-
-    return statuses.map((status) => ({
-        id: status.id,
-        nome: status.nome,
-        total: byId.get(status.id) ?? 0
-    }));
-}
-
-export async function fluxoMensal(db: AppDatabase, ano: number) {
-    const rows = await db.select().from(registrosEntradaSaida);
-    const months = Array.from({ length: 12 }, (_, index) => ({
-        mes: index + 1,
-        entrada: 0,
-        saida: 0
-    }));
-
-    for (const row of rows) {
-        const date = row.criadoEm instanceof Date ? row.criadoEm : new Date(row.criadoEm);
-
-        if (date.getFullYear() !== ano) {
-            continue;
-        }
-
-        const bucket = months[date.getMonth()];
-
-        if (!bucket) {
-            continue;
-        }
-
-        if (row.tipo === "entrada") {
-            bucket.entrada += Number(row.valor);
-        } else {
-            bucket.saida += Number(row.valor);
-        }
-    }
-
-    return {
-        ano,
-        meses: months.map((item) => ({
-            ...item,
-            entrada: Number(item.entrada.toFixed(2)),
-            saida: Number(item.saida.toFixed(2))
-        }))
-    };
 }

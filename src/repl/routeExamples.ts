@@ -263,21 +263,51 @@ const examples: Record<string, Example> = {
         sent: { tipo: "saida", nome: "Compra de peças", valor: 80 },
         response: { data: { id: 1, tipo: "saida", nome: "Compra de peças", valor: 80, pagamentos: [], ordemServico: null } }
     },
-    "GET /api/dashboard/os-status": {
-        sent: {},
-        response: {
-            data: [
-                { id: 1, nome: "aberta", total: 1 },
-                { id: 4, nome: "concluída", total: 0 }
-            ]
-        }
-    },
-    "GET /api/dashboard/fluxo-mensal": {
-        sent: {},
+    "GET /api/dashboard/financeiro-cards": {
+        sent: { periodo: "esta_semana" },
         response: {
             data: {
-                ano: 2026,
-                meses: [{ mes: 1, entrada: 170, saida: 80 }]
+                periodo: "esta_semana",
+                entradaPago: 170,
+                saidaPago: 80,
+                entradaAVencer: 50,
+                saidaAVencer: 20,
+                entradaAtrasado: 10,
+                saidaAtrasado: 5
+            }
+        }
+    },
+    "GET /api/dashboard/fluxo-pago": {
+        sent: { meses: 6, tipo: "entrada" },
+        response: {
+            data: {
+                meses: 6,
+                tipo: "entrada",
+                items: [{ date: "2026-03-01T03:00:00.000Z", value: 170 }]
+            }
+        }
+    },
+    "GET /api/dashboard/os-status": {
+        sent: { periodo: "esta_semana" },
+        response: {
+            data: {
+                periodo: "esta_semana",
+                items: [
+                    { group: "aberta", value: 1 },
+                    { group: "concluída", value: 0 }
+                ]
+            }
+        }
+    },
+    "GET /api/dashboard/os-pagamento": {
+        sent: { periodo: "esta_semana" },
+        response: {
+            data: {
+                periodo: "esta_semana",
+                items: [
+                    { group: "Não pago", value: 2 },
+                    { group: "Pago", value: 1 }
+                ]
             }
         }
     }
