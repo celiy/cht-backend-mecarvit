@@ -465,6 +465,22 @@ function assertStatusTransition(
     }
 }
 
+/** Orçamento is an estimate — no payment processing and no RegEntradaSaida. */
+function assertOrcamentoSemPagamentos(
+    statusOsId: number,
+    pagamentos: PagamentoInput[] | undefined
+): void {
+    if (statusOsId !== STATUS_OS.ORCAMENTO) {
+        return;
+    }
+
+    if (pagamentos && pagamentos.length > 0) {
+        throw new AppError("Orçamento não processa pagamentos", 409, {
+            pagamentos: "Orçamento não processa pagamentos"
+        });
+    }
+}
+
 export async function createOrdemServico(
     db: AppDatabase,
     dto: {
@@ -492,6 +508,8 @@ export async function createOrdemServico(
     if (!statusRows[0]) {
         throw new AppError("Status inválido", 400, { statusOsId: "Status inválido" });
     }
+
+    assertOrcamentoSemPagamentos(statusOsId, dto.pagamentos);
 
     const inserted = await db
         .insert(ordensServico)
@@ -565,6 +583,8 @@ export async function updateOrdemServico(
 
         assertStatusTransition(current.statusOsId, dto.statusOsId, current.pagamentos.length);
     }
+
+    assertOrcamentoSemPagamentos(dto.statusOsId ?? current.statusOsId, dto.pagamentos);
 
     const patch: Record<string, unknown> = {};
 

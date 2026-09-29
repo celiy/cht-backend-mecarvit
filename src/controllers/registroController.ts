@@ -11,6 +11,7 @@ import { asPagamentos, isPagamentosOnlyBody } from "../utils/nested.js";
 import { inArray, and, gte, lte, sql, type SQL } from "drizzle-orm";
 import { parsePagamentoSituacaoFilter } from "@shared/mecarvit/pagamentoSituacao";
 import { registroPagamentoBadgeSortSql } from "../utils/pagamentoSituacaoSortSql.js";
+import { recordAudit } from "../utils/audit.js";
 
 function queryStringValue(query: Record<string, unknown>, key: string): string | undefined {
     const raw = query[key];
@@ -158,12 +159,20 @@ export const createRegistro = catchAsync(async (req: Request, res: Response) => 
         pagamentos: asPagamentos(body.pagamentos)
     });
 
+    recordAudit(req, {
+        action: "create",
+        entity: "reg-entrada-saida",
+        entityId: String(created.id),
+        after: created
+    });
     res.status(201).json({ data: created });
 });
 
 export const updateRegistro = catchAsync(async (req: Request, res: Response) => {
     const body = bodyOf(req);
     const pagamentosOnly = isPagamentosOnlyBody(body);
+    const db = requireDb(req);
+    const id = parseId(req.params.id);
 
     throwIfInvalid(
         validateRegEntradaSaida(body, {
@@ -171,25 +180,39 @@ export const updateRegistro = catchAsync(async (req: Request, res: Response) => 
         })
     );
 
-    const updated = await registroService.updateRegistro(
-        requireDb(req),
-        parseId(req.params.id),
-        {
-            tipo: body.tipo === undefined ? undefined : String(body.tipo),
-            nome: body.nome as string | undefined,
-            valor: body.valor === undefined ? undefined : Number(body.valor),
-            descricao: (body.descricao ?? body.observacao) as string | null | undefined,
-            dataLimitePagamento: body.dataLimitePagamento as string | null | undefined,
-            pagamentos: asPagamentos(body.pagamentos),
-            replaceNested: req.method === "PUT"
-        }
-    );
+    const before = await registroService.getRegistro(db, id);
+    const updated = await registroService.updateRegistro(db, id, {
+        tipo: body.tipo === undefined ? undefined : String(body.tipo),
+        nome: body.nome as string | undefined,
+        valor: body.valor === undefined ? undefined : Number(body.valor),
+        descricao: (body.descricao ?? body.observacao) as string | null | undefined,
+        dataLimitePagamento: body.dataLimitePagamento as string | null | undefined,
+        pagamentos: asPagamentos(body.pagamentos),
+        replaceNested: req.method === "PUT"
+    });
 
+    recordAudit(req, {
+        action: "update",
+        entity: "reg-entrada-saida",
+        entityId: String(id),
+        before,
+        after: updated
+    });
     res.status(200).json({ data: updated });
 });
 
 export const deleteRegistro = catchAsync(async (req: Request, res: Response) => {
-    await registroService.deleteRegistro(requireDb(req), parseId(req.params.id));
+    const db = requireDb(req);
+    const id = parseId(req.params.id);
+    const before = await registroService.getRegistro(db, id);
 
+    await registroService.deleteRegistro(db, id);
+
+    recordAudit(req, {
+        action: "delete",
+        entity: "reg-entrada-saida",
+        entityId: String(id),
+        before
+    });
     res.status(204).send();
 });

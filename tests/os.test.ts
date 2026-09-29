@@ -417,4 +417,86 @@ describe("ordem de serviço, financeiro e dashboard", () => {
         expect(created.body.data.itens).toHaveLength(2);
         expect(created.body.data.total).toBe(240);
     });
+
+    it("orçamento rejeita pagamentos na criação e na atualização", async () => {
+        const ctx = await seedOperacao();
+
+        await request(app)
+            .post("/api/ordem-servico")
+            .set(bearer(ctx.token))
+            .send({
+                clienteDocumento: ctx.documento,
+                veiculoId: ctx.veiculoId,
+                statusOsId: 6,
+                itens: [{ servicoId: ctx.servicoId, quantidade: 1, valor: 100 }],
+                pagamentos: [{ tipo: "dinheiro", valor: 50 }]
+            })
+            .expect(409)
+            .expect((res) => {
+                expect(res.body.error.fields.pagamentos).toMatch(/orçamento/i);
+            });
+
+        const created = await request(app)
+            .post("/api/ordem-servico")
+            .set(bearer(ctx.token))
+            .send({
+                clienteDocumento: ctx.documento,
+                veiculoId: ctx.veiculoId,
+                statusOsId: 6,
+                itens: [{ servicoId: ctx.servicoId, quantidade: 1, valor: 100 }]
+            })
+            .expect(201);
+
+        expect(created.body.data.registroEntradaSaida).toBeNull();
+        expect(created.body.data.pagamentos).toEqual([]);
+
+        await request(app)
+            .patch(`/api/ordem-servico/${created.body.data.id}`)
+            .set(bearer(ctx.token))
+            .send({ pagamentos: [{ tipo: "dinheiro", valor: 10 }] })
+            .expect(409)
+            .expect((res) => {
+                expect(res.body.error.fields.pagamentos).toMatch(/orçamento/i);
+            });
+    });
+
+    it("auditoria registra create/update/delete de reg-entrada-saida", async () => {
+        const oficina = await cadastrarOficina(app);
+        const token = oficina.token as string;
+
+        const created = await request(app)
+            .post("/api/regentradasaida")
+            .set(bearer(token))
+            .send({
+                nome: "Aluguel",
+                tipo: "saida",
+                valor: 500,
+                pagamentos: [{ tipo: "pix", valor: 500 }]
+            })
+            .expect(201);
+
+        const id = created.body.data.id as number;
+
+        await request(app)
+            .patch(`/api/regentradasaida/${id}`)
+            .set(bearer(token))
+            .send({ descricao: "Aluguel do mês" })
+            .expect(200);
+
+        await request(app)
+            .delete(`/api/regentradasaida/${id}`)
+            .set(bearer(token))
+            .expect(204);
+
+        const logs = await request(app)
+            .get("/api/audit-logs?entity=reg-entrada-saida&limit=20")
+            .set(bearer(token))
+            .expect(200);
+
+        const actions = (logs.body.data as Array<{ action: string; entityId?: string }>)
+            .filter((entry) => entry.entityId === String(id))
+            .map((entry) => entry.action);
+
+        expect(actions).toEqual(expect.arrayContaining(["create", "update", "delete"]));
+    });
 });
