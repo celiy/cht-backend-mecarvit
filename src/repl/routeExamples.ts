@@ -310,6 +310,33 @@ const examples: Record<string, Example> = {
                 ]
             }
         }
+    },
+    "GET /api/dashboard/os-reabertas": {
+        sent: { periodo: "esta_semana" },
+        response: {
+            data: {
+                periodo: "esta_semana",
+                items: [{ group: "01/10", value: 1, id: "2026-10-01" }]
+            }
+        }
+    },
+    "GET /api/dashboard/os-reabertas/list": {
+        sent: { periodo: "esta_semana", bucket: "2026-10-01", page: 1 },
+        response: {
+            data: {
+                items: [
+                    {
+                        id: 1,
+                        clienteNome: "Cliente OS",
+                        veiculoLabel: "Civic · CIV1A23",
+                        responsaveis: ["Mecânico"]
+                    }
+                ],
+                total: 1,
+                page: 1,
+                limit: 10
+            }
+        }
     }
 };
 

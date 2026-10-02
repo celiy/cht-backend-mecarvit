@@ -21,6 +21,7 @@ import {
     ordensServico,
     pagamentos,
     registrosEntradaSaida,
+    osReaberturas,
     responsaveis,
     servicos,
     STATUS_OS,
@@ -367,8 +368,8 @@ function mockDeadline(rng: Rng, now = new Date()): Date | null {
 }
 
 /**
- * Payment dates spread evenly across the last 12 months (avoids current-month spikes
- * in monthly charts). Small slice stays in the current week for card filters.
+ * Payment dates spread across the last 6 years (72 months) so yearly fluxo
+ * charts have history. Small slice stays in the current week for card filters.
  */
 function mockPaidAt(rng: Rng, now = new Date()): Date {
     const today = startOfLocalDay(now);
@@ -379,7 +380,7 @@ function mockPaidAt(rng: Rng, now = new Date()): Date {
         return randomBetween(rng, weekStart, today);
     }
 
-    const monthsBack = Math.floor(rng() * 12);
+    const monthsBack = Math.floor(rng() * 72);
     const monthStart = new Date(today.getFullYear(), today.getMonth() - monthsBack, 1, 12, 0, 0, 0);
     const monthEnd = new Date(today.getFullYear(), today.getMonth() - monthsBack + 1, 0, 12, 0, 0, 0);
     const end = monthEnd.getTime() > today.getTime() ? today : monthEnd;
@@ -636,7 +637,8 @@ async function fillMockCompany(
         STATUS_OS.CONCLUIDA,
         STATUS_OS.CANCELADA,
         STATUS_OS.ORCAMENTO,
-        STATUS_OS.ORCAMENTO
+        STATUS_OS.ORCAMENTO,
+        STATUS_OS.REABERTA
     ] as const;
 
     for (let index = 0; index < MOCK_COUNTS.orders; index += 1) {
@@ -646,12 +648,15 @@ async function fillMockCompany(
             continue;
         }
 
-        const statusOsId = pick(rng, statusWeights);
-        const dataInicio = mockEventDate(rng);
+        const forceReaberta = index < 4;
+        const statusOsId = forceReaberta ? STATUS_OS.REABERTA : pick(rng, statusWeights);
+        const dataInicio = forceReaberta ? new Date() : mockEventDate(rng);
         const criadoEm = dataInicio;
-        const modificadoEm = rng() < 0.4
-            ? mockEventDate(rng)
-            : criadoEm;
+        const modificadoEm = forceReaberta
+            ? dataInicio
+            : rng() < 0.4
+                ? mockEventDate(rng)
+                : criadoEm;
         const dataConclusao = statusOsId === STATUS_OS.CONCLUIDA || statusOsId === STATUS_OS.CANCELADA
             ? addLocalDays(dataInicio, 2 + Math.floor(rng() * 12))
             : null;
@@ -766,6 +771,19 @@ async function fillMockCompany(
                 mock: MOCK
             }))
         );
+
+        if (statusOsId === STATUS_OS.REABERTA) {
+            await db.insert(osReaberturas).values({
+                ordemServicoId: osId,
+                reabertoEm: modificadoEm,
+                responsaveisJson: JSON.stringify(
+                    chosenMechanics.map((cpf) => ({ cpf, nome: cpf }))
+                ),
+                criadoEm: modificadoEm,
+                modificadoEm,
+                mock: MOCK
+            });
+        }
     }
 
     for (let index = 0; index < MOCK_COUNTS.extraFinance; index += 1) {
@@ -854,13 +872,13 @@ async function seedDashboardBurst(
         });
     }
 
-    // Paid history: ~14 lançamentos / mês × 12 meses (charts stay balanced).
-    for (let monthsBack = 0; monthsBack < 12; monthsBack += 1) {
+    // Paid history: ~6 lançamentos / mês × 72 meses (6 years for yearly chart).
+    for (let monthsBack = 0; monthsBack < 72; monthsBack += 1) {
         const monthStart = new Date(today.getFullYear(), today.getMonth() - monthsBack, 1, 12, 0, 0, 0);
         const monthEnd = new Date(today.getFullYear(), today.getMonth() - monthsBack + 1, 0, 12, 0, 0, 0);
         const end = monthEnd.getTime() > today.getTime() ? today : monthEnd;
 
-        for (let i = 0; i < 14; i += 1) {
+        for (let i = 0; i < 6; i += 1) {
             const tipo = i % 2 === 0 ? "entrada" : "saida";
             const paidAt = randomBetween(rng, monthStart, end);
 

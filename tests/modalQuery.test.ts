@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
     addModalToQuery,
+    consumeInitialModalQuery,
     parseModalQueryParam,
     registerModalUrlInstance,
     releaseModalUrlInstance,
@@ -91,5 +92,36 @@ describe("scheduleModalUrlQuerySync", () => {
 
         expect(router.push).toHaveBeenCalledTimes(1);
         expect(query.modal).toBe("[1,2]");
+    });
+});
+
+describe("consumeInitialModalQuery", () => {
+    it("strips stale modal query once on load", async () => {
+        resetModalUrlIdAllocator(1);
+        const query: Record<string, unknown> = { modal: "[1,2]", other: "x" };
+        const router = {
+            push: vi.fn(),
+            replace: vi.fn(async (to: { query: Record<string, unknown> }) => {
+                Object.keys(query).forEach((key) => delete query[key]);
+                Object.assign(query, to.query);
+            }),
+            currentRoute: {
+                value: {
+                    get query() {
+                        return query;
+                    }
+                }
+            }
+        };
+
+        consumeInitialModalQuery(router);
+        expect(router.replace).toHaveBeenCalledTimes(1);
+        expect(query.modal).toBeUndefined();
+        expect(query.other).toBe("x");
+
+        query.modal = "[9]";
+        consumeInitialModalQuery(router);
+        expect(router.replace).toHaveBeenCalledTimes(1);
+        expect(query.modal).toBe("[9]");
     });
 });

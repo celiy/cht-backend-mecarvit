@@ -4,12 +4,14 @@ import {
     clientes,
     itensServico,
     ordensServico,
+    osReaberturas,
     pagamentos,
     registrosEntradaSaida,
     responsaveis,
     servicos,
     STATUS_OS,
     statusOs,
+    usuarios,
     veiculos
 } from "../db/schema/index.js";
 import { AppError } from "../utils/AppError.js";
@@ -39,6 +41,36 @@ function totalItens(itens: Array<{ quantidade: number; valor: number }>): number
     return itens.reduce((sum, item) => {
         return sum + Number(item.quantidade) * Number(item.valor);
     }, 0);
+}
+
+async function recordOsReabertura(
+    db: AppDatabase,
+    ordemServicoId: number,
+    cpfs: string[]
+): Promise<void> {
+    const names = new Map<string, string>();
+
+    if (cpfs.length > 0) {
+        const rows = await db.select({ cpf: usuarios.cpf, nome: usuarios.nome }).from(usuarios);
+
+        for (const row of rows) {
+            names.set(row.cpf, row.nome);
+        }
+    }
+
+    const snapshot = cpfs.map((cpf) => ({
+        cpf,
+        nome: names.get(cpf) ?? cpf
+    }));
+    const now = new Date();
+
+    await db.insert(osReaberturas).values({
+        ordemServicoId,
+        reabertoEm: now,
+        responsaveisJson: JSON.stringify(snapshot),
+        criadoEm: now,
+        modificadoEm: now
+    });
 }
 
 export async function listStatusOs(db: AppDatabase) {
@@ -443,29 +475,6 @@ export function presentOrdemServico<T extends {
     };
 }
 
-function assertStatusTransition(
-    fromStatus: number,
-    toStatus: number,
-    pagamentoCount: number
-): void {
-    const leavingConcluida = fromStatus === STATUS_OS.CONCLUIDA && toStatus !== STATUS_OS.CONCLUIDA;
-    const cancelling = toStatus === STATUS_OS.CANCELADA && fromStatus !== STATUS_OS.CANCELADA;
-    const toOrcamento = toStatus === STATUS_OS.ORCAMENTO && fromStatus !== STATUS_OS.ORCAMENTO;
-
-    if (toOrcamento) {
-        throw new AppError("Não é possível alterar uma OS existente para orçamento", 409, {
-            statusOsId: "Orçamento só pode ser definido na criação da OS"
-        });
-    }
-
-    if ((leavingConcluida || cancelling) && pagamentoCount > 0) {
-        throw new AppError("Não é possível alterar o status de uma OS com pagamentos lançados", 409, {
-            statusOsId: "Cancele ou estorne os pagamentos antes de reabrir ou cancelar"
-        });
-    }
-}
-
-/** Orçamento is an estimate — no payment processing and no RegEntradaSaida. */
 function assertOrcamentoSemPagamentos(
     statusOsId: number,
     pagamentos: PagamentoInput[] | undefined
@@ -580,8 +589,6 @@ export async function updateOrdemServico(
         if (!statusRows[0]) {
             throw new AppError("Status inválido", 400, { statusOsId: "Status inválido" });
         }
-
-        assertStatusTransition(current.statusOsId, dto.statusOsId, current.pagamentos.length);
     }
 
     assertOrcamentoSemPagamentos(dto.statusOsId ?? current.statusOsId, dto.pagamentos);
@@ -631,6 +638,13 @@ export async function updateOrdemServico(
 
     if (dto.responsaveis !== undefined) {
         await replaceResponsaveis(db, id, dto.responsaveis);
+    }
+
+    if (
+        dto.statusOsId === STATUS_OS.REABERTA &&
+        current.statusOsId === STATUS_OS.CONCLUIDA
+    ) {
+        await recordOsReabertura(db, id, current.responsaveis);
     }
 
     await syncFinanceiro(db, id, dto.actorCpf, {

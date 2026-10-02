@@ -42,4 +42,7 @@ const inWeek = (d: Date) => d.getTime() >= weekStart.getTime() && d.getTime() <=
 assert(inWeek(today), "today in week filter");
 assert(inWeek(weekStart), "monday in week filter");
 
+const oldestPaid = new Date(today.getFullYear(), today.getMonth() - 71, 1);
+assert(oldestPaid.getFullYear() <= today.getFullYear() - 5, "72 months covers 6 years");
+
 console.log("seedDates ok", { weekStart: weekStart.toISOString(), today: today.toISOString() });

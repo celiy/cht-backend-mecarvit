@@ -10,3 +10,5 @@ dashboardRouter.get("/financeiro-cards", dashboardController.financeiroCards);
 dashboardRouter.get("/fluxo-pago", dashboardController.fluxoPago);
 dashboardRouter.get("/os-status", dashboardController.osStatus);
 dashboardRouter.get("/os-pagamento", dashboardController.osPagamento);
+dashboardRouter.get("/os-reabertas", dashboardController.osReabertas);
+dashboardRouter.get("/os-reabertas/list", dashboardController.osReabertasList);

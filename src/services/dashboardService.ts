@@ -1,12 +1,16 @@
-import { eq, ne } from "drizzle-orm";
+import { desc, eq, inArray, ne } from "drizzle-orm";
 import type { AppDatabase } from "../config/database.js";
 import {
     STATUS_OS,
+    clientes,
     itensServico,
     ordensServico,
+    osReaberturas,
     pagamentos,
     registrosEntradaSaida,
-    statusOs
+    statusOs,
+    usuarios,
+    veiculos
 } from "../db/schema/index.js";
 import {
     PAGAMENTO_SITUACAO,
@@ -17,7 +21,7 @@ import {
 import { AppError } from "../utils/AppError.js";
 
 export type DashboardPeriodo = "esta_semana" | "este_mes" | "6_meses" | "em_geral";
-export type DashboardMeses = 6 | 12;
+export type DashboardMeses = 6 | 12 | 72;
 export type FluxoPagoTipo = "entrada" | "saida" | "comparativo";
 
 const PERIODOS: DashboardPeriodo[] = ["esta_semana", "este_mes", "6_meses", "em_geral"];
@@ -45,11 +49,11 @@ export function parseDashboardMeses(raw: unknown): DashboardMeses {
 
     const n = Number(raw);
 
-    if (n === 6 || n === 12) {
+    if (n === 6 || n === 12 || n === 72) {
         return n;
     }
 
-    throw new AppError("meses inválido", 400, { meses: "Use 6 ou 12" });
+    throw new AppError("meses inválido", 400, { meses: "Use 6, 12 ou 72" });
 }
 
 export function parseFluxoPagoTipo(raw: unknown): FluxoPagoTipo {
@@ -175,6 +179,19 @@ function monthBuckets(
     meses: DashboardMeses,
     now = new Date()
 ): Array<{ key: string; year: number; month: number }> {
+    if (meses === 72) {
+        const year = now.getFullYear();
+        const buckets: Array<{ key: string; year: number; month: number }> = [];
+
+        for (let i = 0; i < 6; i += 1) {
+            const y = year - 5 + i;
+
+            buckets.push({ key: String(y), year: y, month: 1 });
+        }
+
+        return buckets;
+    }
+
     const buckets: Array<{ key: string; year: number; month: number }> = [];
     const cursor = new Date(now.getFullYear(), now.getMonth() - (meses - 1), 1);
 
@@ -313,7 +330,7 @@ export async function fluxoPago(db: AppDatabase, meses: DashboardMeses, tipo: Fl
             continue;
         }
 
-        const key = monthKey(entry.paidAt);
+        const key = meses === 72 ? String(entry.paidAt.getFullYear()) : monthKey(entry.paidAt);
         const bucket = byKey.get(key);
 
         if (!bucket) {
@@ -336,7 +353,9 @@ export async function fluxoPago(db: AppDatabase, meses: DashboardMeses, tipo: Fl
         if (tipo === "comparativo") {
             return {
                 date: date.toISOString(),
-                value: Number((values.entrada - values.saida).toFixed(2))
+                value: Number((values.entrada - values.saida).toFixed(2)),
+                entrada: Number(values.entrada.toFixed(2)),
+                saida: Number(values.saida.toFixed(2))
             };
         }
 
@@ -344,7 +363,9 @@ export async function fluxoPago(db: AppDatabase, meses: DashboardMeses, tipo: Fl
 
         return {
             date: date.toISOString(),
-            value: Number(value.toFixed(2))
+            value: Number(value.toFixed(2)),
+            entrada: Number(values.entrada.toFixed(2)),
+            saida: Number(values.saida.toFixed(2))
         };
     });
 
@@ -475,5 +496,256 @@ export async function osPorPagamento(db: AppDatabase, periodo: DashboardPeriodo)
             group,
             value: counts[group]
         }))
+    };
+}
+
+function pad2(n: number): string {
+    return String(n).padStart(2, "0");
+}
+
+function reaberturaBucket(date: Date, periodo: DashboardPeriodo): string {
+    const y = date.getFullYear();
+    const m = pad2(date.getMonth() + 1);
+
+    if (periodo === "6_meses" || periodo === "em_geral") {
+        return `${y}-${m}`;
+    }
+
+    return `${y}-${m}-${pad2(date.getDate())}`;
+}
+
+function reaberturaBucketLabel(bucket: string): string {
+    const parts = bucket.split("-");
+    const year = parts[0] ?? "";
+    const month = Number(parts[1] ?? 1);
+    const monthNames = [
+        "Jan",
+        "Fev",
+        "Mar",
+        "Abr",
+        "Mai",
+        "Jun",
+        "Jul",
+        "Ago",
+        "Set",
+        "Out",
+        "Nov",
+        "Dez"
+    ];
+    const monthLabel = monthNames[month - 1] ?? bucket;
+
+    if (parts.length === 2) {
+        return `${monthLabel}/${year.slice(2)}`;
+    }
+
+    const day = parts[2] ?? "";
+
+    return `${day}/${pad2(month)}`;
+}
+
+function listReaberturaBuckets(periodo: DashboardPeriodo, now = new Date()): string[] {
+    const range = periodRange(periodo, now);
+
+    if (periodo === "6_meses" || periodo === "em_geral") {
+        const start = range?.start ?? new Date(now.getFullYear() - 2, now.getMonth(), 1);
+        const buckets: string[] = [];
+        const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+        const last = new Date(now.getFullYear(), now.getMonth(), 1);
+
+        while (cursor <= last) {
+            buckets.push(reaberturaBucket(cursor, periodo));
+            cursor.setMonth(cursor.getMonth() + 1);
+        }
+
+        return buckets;
+    }
+
+    if (!range) {
+        return [];
+    }
+
+    const buckets: string[] = [];
+    const cursor = startOfLocalDay(range.start);
+    const last = startOfLocalDay(range.end);
+
+    while (cursor <= last) {
+        buckets.push(reaberturaBucket(cursor, periodo));
+        cursor.setDate(cursor.getDate() + 1);
+    }
+
+    return buckets;
+}
+
+type ResponsavelSnapshot = { cpf: string; nome: string };
+
+type LatestReabertura = {
+    ordemServicoId: number;
+    reabertoEm: Date;
+    responsaveis: ResponsavelSnapshot[];
+};
+
+async function latestReaberturas(
+    db: AppDatabase,
+    range: { start: Date; end: Date } | null
+): Promise<LatestReabertura[]> {
+    const logs = await db
+        .select({
+            ordemServicoId: osReaberturas.ordemServicoId,
+            reabertoEm: osReaberturas.reabertoEm,
+            responsaveisJson: osReaberturas.responsaveisJson
+        })
+        .from(osReaberturas)
+        .orderBy(desc(osReaberturas.reabertoEm));
+    const latest = new Map<number, { reabertoEm: Date; responsaveis: ResponsavelSnapshot[] }>();
+
+    for (const row of logs) {
+        const at = toDate(row.reabertoEm);
+
+        if (!at || latest.has(row.ordemServicoId)) {
+            continue;
+        }
+
+        let snapshot: ResponsavelSnapshot[] = [];
+
+        try {
+            const parsed = JSON.parse(row.responsaveisJson || "[]") as Array<{
+                nome?: string;
+                cpf?: string;
+            }>;
+
+            snapshot = parsed
+                .map((entry) => ({ cpf: entry.cpf ?? "", nome: entry.nome ?? "" }))
+                .filter((entry) => entry.cpf || entry.nome);
+        } catch {
+            snapshot = [];
+        }
+
+        latest.set(row.ordemServicoId, { reabertoEm: at, responsaveis: snapshot });
+    }
+
+    return [...latest.entries()]
+        .filter(([, entry]) => !range || inRange(entry.reabertoEm, range))
+        .map(([ordemServicoId, entry]) => ({
+            ordemServicoId,
+            reabertoEm: entry.reabertoEm,
+            responsaveis: entry.responsaveis
+        }));
+}
+
+export async function osReabertasChart(db: AppDatabase, periodo: DashboardPeriodo) {
+    const range = periodRange(periodo);
+    const latest = await latestReaberturas(db, range);
+    const reabertaIds = new Set(
+        (
+            await db
+                .select({ id: ordensServico.id })
+                .from(ordensServico)
+                .where(eq(ordensServico.statusOsId, STATUS_OS.REABERTA))
+        ).map((row) => row.id)
+    );
+    const counts = new Map<string, number>();
+
+    for (const entry of latest) {
+        if (!reabertaIds.has(entry.ordemServicoId)) {
+            continue;
+        }
+
+        const bucket = reaberturaBucket(entry.reabertoEm, periodo);
+
+        counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
+    }
+
+    const buckets = listReaberturaBuckets(periodo);
+    const used = buckets.length > 0 ? buckets : [...counts.keys()].sort();
+
+    return {
+        periodo,
+        items: used.map((bucket) => ({
+            group: reaberturaBucketLabel(bucket),
+            value: counts.get(bucket) ?? 0,
+            id: bucket
+        }))
+    };
+}
+
+export type OsReabertaListItem = {
+    id: number;
+    clienteNome: string;
+    veiculoLabel: string;
+    responsaveis: string[];
+};
+
+export async function listOsReabertas(
+    db: AppDatabase,
+    periodo: DashboardPeriodo,
+    options: { bucket?: string; page?: number; limit?: number }
+): Promise<{ items: OsReabertaListItem[]; total: number; page: number; limit: number }> {
+    const range = periodRange(periodo);
+    const page = Math.max(1, options.page ?? 1);
+    const limit = Math.min(50, Math.max(1, options.limit ?? 10));
+    const latest = (await latestReaberturas(db, range)).filter((entry) => {
+        if (!options.bucket) {
+            return true;
+        }
+
+        return reaberturaBucket(entry.reabertoEm, periodo) === options.bucket;
+    });
+    const ids = latest.map((entry) => entry.ordemServicoId);
+
+    if (ids.length === 0) {
+        return { items: [], total: 0, page, limit };
+    }
+
+    const orders = await db
+        .select()
+        .from(ordensServico)
+        .where(eq(ordensServico.statusOsId, STATUS_OS.REABERTA));
+    const matched = orders
+        .filter((os) => ids.includes(os.id))
+        .sort((a, b) => b.id - a.id);
+    const total = matched.length;
+    const slice = matched.slice((page - 1) * limit, page * limit);
+
+    if (slice.length === 0) {
+        return { items: [], total, page, limit };
+    }
+
+    const clienteDocs = slice.map((os) => os.clienteDocumento);
+    const veiculoIds = slice.map((os) => os.veiculoId);
+    const clienteRows = await db.select().from(clientes).where(inArray(clientes.documento, clienteDocs));
+    const veiculoRows = await db.select().from(veiculos).where(inArray(veiculos.id, veiculoIds));
+    const clienteByDoc = new Map(clienteRows.map((row) => [row.documento, row.nome]));
+    const veiculoById = new Map(
+        veiculoRows.map((row) => [row.id, `${row.modelo} · ${row.placa}`])
+    );
+    const respByOs = new Map(latest.map((entry) => [entry.ordemServicoId, entry.responsaveis]));
+    const cpfs = [
+        ...new Set(
+            slice.flatMap((os) => (respByOs.get(os.id) ?? []).map((entry) => entry.cpf))
+        )
+    ].filter(Boolean);
+    const usuarioRows =
+        cpfs.length > 0
+            ? await db
+                .select({ cpf: usuarios.cpf, nome: usuarios.nome })
+                .from(usuarios)
+                .where(inArray(usuarios.cpf, cpfs))
+            : [];
+    const nomeByCpf = new Map(usuarioRows.map((row) => [row.cpf, row.nome]));
+
+    return {
+        items: slice.map((os) => ({
+            id: os.id,
+            clienteNome: clienteByDoc.get(os.clienteDocumento) ?? os.clienteDocumento,
+            veiculoLabel: veiculoById.get(os.veiculoId) ?? String(os.veiculoId),
+            responsaveis: (respByOs.get(os.id) ?? []).map((entry) => {
+                const snapshotNome = entry.nome && entry.nome !== entry.cpf ? entry.nome : "";
+
+                return nomeByCpf.get(entry.cpf) || snapshotNome || "Funcionário removido";
+            })
+        })),
+        total,
+        page,
+        limit
     };
 }

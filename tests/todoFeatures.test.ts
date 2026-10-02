@@ -195,7 +195,7 @@ describe("regras de OS e pagamentos", () => {
             .patch(`/api/ordem-servico/${osId}`)
             .set(bearer(ctx.token))
             .send({ statusOsId: 6 })
-            .expect(409);
+            .expect(200);
 
         await request(app)
             .patch(`/api/ordem-servico/${osId}`)

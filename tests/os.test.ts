@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import request from "supertest";
 import { createApp } from "../src/app.js";
-import { bearer, cadastrarOficina, uniqueCpf } from "./helpers.js";
+import { bearer, cadastrarOficina, criarCargo, criarFuncionario, uniqueCpf } from "./helpers.js";
 
 const app = createApp();
 
@@ -227,8 +227,10 @@ describe("ordem de serviço, financeiro e dashboard", () => {
             .set(bearer(ctx.token))
             .expect(200);
 
-        expect(Array.isArray(status.body.data)).toBe(true);
-        expect(status.body.data.some((item: { nome: string }) => item.nome === "aberta")).toBe(true);
+        expect(status.body.data.items).toEqual(expect.any(Array));
+        expect(
+            status.body.data.items.some((item: { group: string }) => item.group === "aberta")
+        ).toBe(true);
 
         const fluxo = await request(app)
             .get(`/api/dashboard/fluxo-mensal?ano=${new Date().getFullYear()}`)
@@ -498,5 +500,60 @@ describe("ordem de serviço, financeiro e dashboard", () => {
             .map((entry) => entry.action);
 
         expect(actions).toEqual(expect.arrayContaining(["create", "update", "delete"]));
+    });
+
+    it("reabre OS concluída, registra log e lista no dashboard", async () => {
+        const ctx = await seedOperacao();
+        const cargo = await criarCargo(app, ctx.token);
+        const funcionario = await criarFuncionario(app, ctx.token, cargo.id, {
+            nome: "Carla Mecanica"
+        });
+        const created = await request(app)
+            .post("/api/ordem-servico")
+            .set(bearer(ctx.token))
+            .send({
+                clienteDocumento: ctx.documento,
+                veiculoId: ctx.veiculoId,
+                responsaveis: [funcionario.cpf],
+                itens: [{ servicoId: ctx.servicoId, quantidade: 1, valor: 100 }]
+            })
+            .expect(201);
+        const osId = created.body.data.id as number;
+
+        await request(app)
+            .patch(`/api/ordem-servico/${osId}`)
+            .set(bearer(ctx.token))
+            .send({ statusOsId: 4 })
+            .expect(200);
+
+        const reaberta = await request(app)
+            .patch(`/api/ordem-servico/${osId}`)
+            .set(bearer(ctx.token))
+            .send({ statusOsId: 7 })
+            .expect(200);
+
+        expect(reaberta.body.data.statusOsId).toBe(7);
+
+        const chart = await request(app)
+            .get("/api/dashboard/os-reabertas?periodo=em_geral")
+            .set(bearer(ctx.token))
+            .expect(200);
+        const chartTotal = (chart.body.data.items as Array<{ value: number }>).reduce(
+            (sum, item) => sum + item.value,
+            0
+        );
+
+        expect(chartTotal).toBeGreaterThanOrEqual(1);
+
+        const list = await request(app)
+            .get("/api/dashboard/os-reabertas/list?periodo=em_geral")
+            .set(bearer(ctx.token))
+            .expect(200);
+
+        const item = (list.body.data.items as Array<{ id: number; responsaveis: string[] }>).find(
+            (entry) => entry.id === osId
+        );
+
+        expect(item?.responsaveis).toEqual(["Carla Mecanica"]);
     });
 });

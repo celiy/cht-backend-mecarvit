@@ -36,6 +36,13 @@
       "when": 1789990000000,
       "tag": "0004_item_valor_orcamento",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1790000000000,
+      "tag": "0005_os_reabertura",
+      "breakpoints": true
     }
   ]
 }

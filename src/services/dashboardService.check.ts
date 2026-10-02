@@ -13,6 +13,7 @@ function assert(cond: boolean, label: string) {
 
 assert(parseDashboardPeriodo(undefined) === "esta_semana", "default periodo");
 assert(parseDashboardMeses("12") === 12, "meses 12");
+assert(parseDashboardMeses("72") === 72, "meses 6 anos");
 
 const monday = new Date("2026-09-28T15:00:00");
 const week = periodRange("esta_semana", monday);

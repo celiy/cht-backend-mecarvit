@@ -31,3 +31,24 @@ export const osPagamento = catchAsync(async (req: Request, res: Response) => {
 
     res.status(200).json({ data });
 });
+
+export const osReabertas = catchAsync(async (req: Request, res: Response) => {
+    const periodo = dashboardService.parseDashboardPeriodo(req.query.periodo);
+    const data = await dashboardService.osReabertasChart(requireDb(req), periodo);
+
+    res.status(200).json({ data });
+});
+
+export const osReabertasList = catchAsync(async (req: Request, res: Response) => {
+    const periodo = dashboardService.parseDashboardPeriodo(req.query.periodo);
+    const bucket = typeof req.query.bucket === "string" ? req.query.bucket.trim() : "";
+    const page = Number(req.query.page);
+    const limit = Number(req.query.limit);
+    const data = await dashboardService.listOsReabertas(requireDb(req), periodo, {
+        bucket: bucket || undefined,
+        page: Number.isInteger(page) && page > 0 ? page : 1,
+        limit: Number.isInteger(limit) && limit > 0 ? limit : 10
+    });
+
+    res.status(200).json({ data });
+});
