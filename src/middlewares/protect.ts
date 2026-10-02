@@ -2,17 +2,12 @@ import type { NextFunction, Request, Response } from "express";
 import { catchAsync } from "../utils/catchAsync.js";
 import { AppError } from "../utils/AppError.js";
 import { verifyToken } from "../utils/jwt.js";
+import { clearAuthCookie, readAuthToken } from "../utils/authCookie.js";
 import { empresaExists, openCompany } from "../config/database.js";
 import * as usuarioService from "../services/usuarioService.js";
 
-export const protect = catchAsync(async (req: Request, _res: Response, next: NextFunction) => {
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        throw new AppError("Não autenticado", 401);
-    }
-
-    const token = authHeader.slice("Bearer ".length).trim();
+export const protect = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const token = readAuthToken(req);
 
     if (!token) {
         throw new AppError("Não autenticado", 401);
@@ -23,10 +18,12 @@ export const protect = catchAsync(async (req: Request, _res: Response, next: Nex
     try {
         payload = verifyToken(token);
     } catch {
+        clearAuthCookie(res);
         throw new AppError("Token inválido ou expirado", 401);
     }
 
     if (!empresaExists(payload.empresaId)) {
+        clearAuthCookie(res);
         throw new AppError("Empresa não encontrada", 401);
     }
 
@@ -34,6 +31,7 @@ export const protect = catchAsync(async (req: Request, _res: Response, next: Nex
     const user = await usuarioService.findPublicByCpf(db, payload.sub);
 
     if (!user || !user.ativo) {
+        clearAuthCookie(res);
         throw new AppError("Usuário não encontrado", 401);
     }
 

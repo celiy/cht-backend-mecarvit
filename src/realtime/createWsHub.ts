@@ -87,6 +87,23 @@ export function createWsHub(options: CreateWsHubOptions): WsHub {
                     }
                 }, authTimeoutMs);
 
+                void (async () => {
+                    if (!request.headers.cookie) {
+                        return;
+                    }
+
+                    const identity = await options.authenticate("", request);
+
+                    if (!identity || entry.identity) {
+                        return;
+                    }
+
+                    entry.identity = identity;
+                    subscribe(entry, identity.topics);
+                    clearTimeout(authTimer);
+                    send(socket, { op: "ready", topics: [...entry.topics] });
+                })();
+
                 socket.on("message", (data) => {
                     void (async () => {
                         const parsed = parseWsMessage(String(data));
@@ -115,11 +132,10 @@ export function createWsHub(options: CreateWsHubOptions): WsHub {
                         }
 
                         if (entry.identity) {
-                            send(socket, {
-                                op: "error",
-                                code: "already_authenticated",
-                                message: "Já autenticado"
-                            });
+                            if (parsed.op === "auth") {
+                                send(socket, { op: "ready", topics: [...entry.topics] });
+                            }
+
                             return;
                         }
 

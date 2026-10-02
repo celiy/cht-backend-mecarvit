@@ -115,4 +115,36 @@ describe("createWsHub", () => {
         hub.close();
         await closeServer(server);
     });
+
+    it("autentica pelo cookie do handshake sem mensagem auth", async () => {
+        const server = http.createServer();
+        const hub = createWsHub({
+            authenticate: async (token, request) => {
+                const cookie = String(request.headers.cookie ?? "");
+
+                if (cookie.includes("cht_auth=from-cookie") || token === "from-cookie") {
+                    return { id: "cookie-user", topics: ["empresa:1"] };
+                }
+
+                return null;
+            }
+        });
+
+        hub.attach(server);
+        const port = await listen(server);
+        const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`, {
+            headers: { Cookie: "cht_auth=from-cookie" }
+        });
+
+        const ready = await waitMessage(socket);
+
+        expect(ready).toEqual({
+            op: "ready",
+            topics: ["empresa:1"]
+        });
+
+        socket.close();
+        hub.close();
+        await closeServer(server);
+    });
 });

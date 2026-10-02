@@ -4,6 +4,7 @@ import { isSuperadmin } from "@shared/mecarvit/access";
 import { empresaExists, openCompany } from "../config/database.js";
 import * as usuarioService from "../services/usuarioService.js";
 import { verifyToken } from "../utils/jwt.js";
+import { readAuthToken } from "../utils/authCookie.js";
 import type { PublicUsuario } from "../entities/Usuario.js";
 import type { Request } from "express";
 import { createWsHub, type WsHub } from "./createWsHub.js";
@@ -25,14 +26,26 @@ export function topicsForUsuario(user: PublicUsuario): string[] {
 
 export async function authenticateMecarvitSocket(
     token: string,
-    _request: IncomingMessage
+    request: IncomingMessage
 ): Promise<{ id: string; topics: string[] } | null> {
-    void _request;
+    const resolved = token.trim() || readAuthToken({
+        headers: {
+            cookie: request.headers.cookie,
+            authorization: Array.isArray(request.headers.authorization)
+                ? request.headers.authorization[0]
+                : request.headers.authorization
+        },
+        cookies: {}
+    });
+
+    if (!resolved) {
+        return null;
+    }
 
     let payload;
 
     try {
-        payload = verifyToken(token);
+        payload = verifyToken(resolved);
     } catch {
         return null;
     }

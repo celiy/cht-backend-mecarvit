@@ -5,6 +5,7 @@ import { catchAsync } from "../utils/catchAsync.js";
 import { throwIfInvalid, bodyOf } from "../utils/validate.js";
 import * as authService from "../services/authService.js";
 import { requireUser } from "../utils/http.js";
+import { clearAuthCookie, setAuthCookie } from "../utils/authCookie.js";
 
 export const cadastro = catchAsync(async (req: Request, res: Response) => {
     const body = bodyOf(req);
@@ -22,6 +23,7 @@ export const cadastro = catchAsync(async (req: Request, res: Response) => {
         }
     });
 
+    setAuthCookie(res, result.token);
     res.status(201).json({ data: result });
 });
 
@@ -44,6 +46,7 @@ export const login = catchAsync(async (req: Request, res: Response) => {
         empresaId
     });
 
+    setAuthCookie(res, result.token);
     res.status(200).json({ data: result });
 });
 
@@ -55,4 +58,9 @@ export const empresaLocais = catchAsync(async (_req: Request, res: Response) => 
 
 export const me = catchAsync(async (req: Request, res: Response) => {
     res.status(200).json({ data: requireUser(req) });
+});
+
+export const logout = catchAsync(async (_req: Request, res: Response) => {
+    clearAuthCookie(res);
+    res.status(204).end();
 });

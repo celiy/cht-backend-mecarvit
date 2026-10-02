@@ -5,6 +5,7 @@ import {
     SENHA,
     bearer,
     cadastrarOficina,
+    cookieHeaderFromResponse,
     uniqueCpf,
     uniqueEmail
 } from "./helpers.js";
@@ -151,5 +152,56 @@ describe("health e cadastro/login", () => {
             .expect(200);
 
         expect(login.body.data.precisaTrocarSenha).toBe(true);
+    });
+
+    it("login e cadastro gravam cookie httpOnly e /api/me aceita o cookie", async () => {
+        const created = await cadastrarOficina(app);
+        const cadastroCookie = cookieHeaderFromResponse(created.response);
+
+        expect(cadastroCookie).toMatch(/cht_auth=/);
+        expect(String(created.response.headers["set-cookie"])).toMatch(/HttpOnly/i);
+
+        const meFromCadastro = await request(app)
+            .get("/api/me")
+            .set("Cookie", cadastroCookie)
+            .expect(200);
+
+        expect(meFromCadastro.body.data.email).toBe(created.email);
+
+        const login = await request(app)
+            .post("/api/login")
+            .send({ email: created.email, senha: SENHA })
+            .expect(200);
+
+        const loginCookie = cookieHeaderFromResponse(login);
+
+        expect(loginCookie).toMatch(/cht_auth=/);
+        expect(String(login.headers["set-cookie"])).toMatch(/HttpOnly/i);
+
+        const meFromLogin = await request(app)
+            .get("/api/me")
+            .set("Cookie", loginCookie)
+            .expect(200);
+
+        expect(meFromLogin.body.data.email).toBe(created.email);
+    });
+
+    it("POST /api/logout apaga o cookie e as rotas privadas voltam a 401", async () => {
+        const created = await cadastrarOficina(app);
+        const cookie = cookieHeaderFromResponse(created.response);
+
+        await request(app).get("/api/me").set("Cookie", cookie).expect(200);
+
+        const logout = await request(app)
+            .post("/api/logout")
+            .set("Cookie", cookie)
+            .expect(204);
+
+        const cleared = String(logout.headers["set-cookie"] ?? "");
+
+        expect(cleared).toMatch(/cht_auth=/);
+        expect(cleared).toMatch(/Expires=Thu, 01 Jan 1970/i);
+
+        await request(app).get("/api/me").expect(401);
     });
 });

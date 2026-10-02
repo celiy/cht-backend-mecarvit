@@ -67,6 +67,21 @@ export function bearer(token: string) {
     return { Authorization: `Bearer ${token}` };
 }
 
+export function cookieHeaderFromResponse(response: { headers: Record<string, unknown> }): string {
+    const raw = response.headers["set-cookie"];
+
+    if (!raw) {
+        return "";
+    }
+
+    const list = Array.isArray(raw) ? raw : [raw];
+
+    return list
+        .map((part) => String(part).split(";")[0])
+        .filter(Boolean)
+        .join("; ");
+}
+
 export async function cadastrarOficina(
     app: Express,
     overrides?: {

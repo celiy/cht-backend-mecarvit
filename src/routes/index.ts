@@ -18,6 +18,7 @@ export const apiRouter = Router();
 
 apiRouter.post("/cadastro", authController.cadastro);
 apiRouter.post("/login", authController.login);
+apiRouter.post("/logout", authController.logout);
 apiRouter.get("/empresa-locais", authController.empresaLocais);
 
 const privateRouter = Router();
