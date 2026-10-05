@@ -192,10 +192,7 @@ describe("health e cadastro/login", () => {
 
         await request(app).get("/api/me").set("Cookie", cookie).expect(200);
 
-        const logout = await request(app)
-            .post("/api/logout")
-            .set("Cookie", cookie)
-            .expect(204);
+        const logout = await request(app).post("/api/logout").set("Cookie", cookie).expect(204);
 
         const cleared = String(logout.headers["set-cookie"] ?? "");
 

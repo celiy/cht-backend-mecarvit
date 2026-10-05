@@ -12,7 +12,13 @@ export const cadastro = catchAsync(async (req: Request, res: Response) => {
     throwIfInvalid(validateCadastro(body));
 
     const empresa = body.empresa as { nome: string };
-    const usuario = body.usuario as { cpf: string; nome: string; email: string; senha?: string; password?: string };
+    const usuario = body.usuario as {
+        cpf: string;
+        nome: string;
+        email: string;
+        senha?: string;
+        password?: string;
+    };
     const result = await authService.cadastrarEmpresa({
         empresa,
         usuario: {
@@ -29,16 +35,19 @@ export const cadastro = catchAsync(async (req: Request, res: Response) => {
 
 export const login = catchAsync(async (req: Request, res: Response) => {
     const body = bodyOf(req);
-    throwIfInvalid(validateLogin({
-        email: body.email as string,
-        senha: (body.senha ?? body.password) as string,
-        empresaId: body.empresaId as number | undefined
-    }));
+    throwIfInvalid(
+        validateLogin({
+            email: body.email as string,
+            senha: (body.senha ?? body.password) as string,
+            empresaId: body.empresaId as number | undefined
+        })
+    );
 
     const empresaIdRaw = body.empresaId;
-    const empresaId = empresaIdRaw === undefined || empresaIdRaw === null || empresaIdRaw === ""
-        ? undefined
-        : Number(empresaIdRaw);
+    const empresaId =
+        empresaIdRaw === undefined || empresaIdRaw === null || empresaIdRaw === ""
+            ? undefined
+            : Number(empresaIdRaw);
 
     const result = await authService.login({
         email: String(body.email),
