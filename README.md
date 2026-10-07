@@ -6,6 +6,22 @@ Backend específico do cliente Mecarvit (núcleo do TCC).
 
 API local Express + SQLite + Drizzle. Cada oficina é um arquivo `data/empresas/{id}.sqlite`. O gestor cria a empresa em `POST /api/cadastro`.
 
+## Repositórios do ecossistema
+
+| Repositório | Papel |
+| --- | --- |
+| [cht-main](https://github.com/celiy/cht-main) | Orquestração do workspace: `install`, runner, build e Electron. |
+| [cht-base](https://github.com/celiy/cht-base) | Shell Vue/Vite que carrega o frontend do cliente e inicia este backend no app desktop. |
+| [cht-design-system](https://github.com/celiy/cht-design-system) | Componentes de UI. |
+| [cht-shared](https://github.com/celiy/cht-shared) | Validadores, contratos e regras de domínio usados por este backend (alias `@shared`). |
+| [cht-client-mecarvit](https://github.com/celiy/cht-client-mecarvit) | Frontend que consome esta API. |
+
+## Documentação
+
+A pasta [`docs/`](./docs/README.md) explica cada parte do backend, em português: arquitetura, banco, autenticação e permissões, middlewares, tempo real, testes e **uma página por recurso** (rotas, controller, serviço e regras de negócio).
+
+Comece por [`docs/visao-geral.md`](./docs/visao-geral.md). O índice completo está em [`docs/README.md`](./docs/README.md).
+
 ## Contrato
 
 - Prefixo `/api`. JSON em português (`cpf`, `nome`, `senha`, `documento`, `criadoEm`).
