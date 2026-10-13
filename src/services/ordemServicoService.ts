@@ -4,14 +4,12 @@ import {
     clientes,
     itensServico,
     ordensServico,
-    osReaberturas,
     pagamentos,
     registrosEntradaSaida,
     responsaveis,
     servicos,
     STATUS_OS,
     statusOs,
-    usuarios,
     veiculos
 } from "../db/schema/index.js";
 import { AppError } from "../utils/AppError.js";
@@ -41,36 +39,6 @@ function totalItens(itens: Array<{ quantidade: number; valor: number }>): number
     return itens.reduce((sum, item) => {
         return sum + Number(item.quantidade) * Number(item.valor);
     }, 0);
-}
-
-async function recordOsReabertura(
-    db: AppDatabase,
-    ordemServicoId: number,
-    cpfs: string[]
-): Promise<void> {
-    const names = new Map<string, string>();
-
-    if (cpfs.length > 0) {
-        const rows = await db.select({ cpf: usuarios.cpf, nome: usuarios.nome }).from(usuarios);
-
-        for (const row of rows) {
-            names.set(row.cpf, row.nome);
-        }
-    }
-
-    const snapshot = cpfs.map((cpf) => ({
-        cpf,
-        nome: names.get(cpf) ?? cpf
-    }));
-    const now = new Date();
-
-    await db.insert(osReaberturas).values({
-        ordemServicoId,
-        reabertoEm: now,
-        responsaveisJson: JSON.stringify(snapshot),
-        criadoEm: now,
-        modificadoEm: now
-    });
 }
 
 export async function listStatusOs(db: AppDatabase) {
@@ -638,13 +606,6 @@ export async function updateOrdemServico(
 
     if (dto.responsaveis !== undefined) {
         await replaceResponsaveis(db, id, dto.responsaveis);
-    }
-
-    if (
-        dto.statusOsId === STATUS_OS.REABERTA &&
-        current.statusOsId === STATUS_OS.CONCLUIDA
-    ) {
-        await recordOsReabertura(db, id, current.responsaveis);
     }
 
     await syncFinanceiro(db, id, dto.actorCpf, {

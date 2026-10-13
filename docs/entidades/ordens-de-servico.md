@@ -117,7 +117,7 @@ A OS e o lançamento financeiro andam juntos:
 
 - Os itens e os responsáveis enviados **substituem** os atuais.
 - Mudar o status ajusta `dataConclusao`: concluída mantém a data existente (ou usa agora); qualquer outro status a limpa.
-- Se a OS vai de **concluída para reaberta**, grava uma linha em `os_reabertura` com os responsáveis daquele momento. O dashboard usa esse histórico.
+- Uma OS reaberta é a que está com status `reaberta`; o dashboard usa o `modificado_em` dela como momento da reabertura e os responsáveis atuais.
 
 ### Edição limitada (quem não tem `os.criar`)
 

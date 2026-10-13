@@ -189,18 +189,6 @@ export const pagamentos = sqliteTable("pagamento", {
     ...mockFlag()
 });
 
-export const osReaberturas = sqliteTable("os_reabertura", {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    ordemServicoId: integer("ordem_servico_id")
-        .notNull()
-        .references(() => ordensServico.id, { onDelete: "cascade" }),
-    reabertoEm: integer("reaberto_em", { mode: "timestamp" }).notNull(),
-    /** JSON array of `{ cpf, nome }` at reopen time. */
-    responsaveisJson: text("responsaveis_json").notNull().default("[]"),
-    ...timestamps(),
-    ...mockFlag()
-});
-
 export const STATUS_OS = {
     ABERTA: 1,
     PENDENTE: 2,

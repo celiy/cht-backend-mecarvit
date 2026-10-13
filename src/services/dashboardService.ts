@@ -1,13 +1,13 @@
-import { desc, eq, inArray, ne } from "drizzle-orm";
+import { eq, inArray, ne } from "drizzle-orm";
 import type { AppDatabase } from "../config/database.js";
 import {
     STATUS_OS,
     clientes,
     itensServico,
     ordensServico,
-    osReaberturas,
     pagamentos,
     registrosEntradaSaida,
+    responsaveis,
     statusOs,
     usuarios,
     veiculos
@@ -576,80 +576,41 @@ function listReaberturaBuckets(periodo: DashboardPeriodo, now = new Date()): str
     return buckets;
 }
 
-type ResponsavelSnapshot = { cpf: string; nome: string };
-
 type LatestReabertura = {
     ordemServicoId: number;
     reabertoEm: Date;
-    responsaveis: ResponsavelSnapshot[];
 };
 
+/**
+ * Reopened OS are those currently in status `reaberta`; the reopen moment is the OS `modificadoEm`.
+ */
 async function latestReaberturas(
     db: AppDatabase,
     range: { start: Date; end: Date } | null
 ): Promise<LatestReabertura[]> {
-    const logs = await db
-        .select({
-            ordemServicoId: osReaberturas.ordemServicoId,
-            reabertoEm: osReaberturas.reabertoEm,
-            responsaveisJson: osReaberturas.responsaveisJson
-        })
-        .from(osReaberturas)
-        .orderBy(desc(osReaberturas.reabertoEm));
-    const latest = new Map<number, { reabertoEm: Date; responsaveis: ResponsavelSnapshot[] }>();
+    const rows = await db
+        .select({ id: ordensServico.id, modificadoEm: ordensServico.modificadoEm })
+        .from(ordensServico)
+        .where(eq(ordensServico.statusOsId, STATUS_OS.REABERTA));
+    const latest: LatestReabertura[] = [];
 
-    for (const row of logs) {
-        const at = toDate(row.reabertoEm);
+    for (const row of rows) {
+        const at = toDate(row.modificadoEm);
 
-        if (!at || latest.has(row.ordemServicoId)) {
-            continue;
+        if (at && (!range || inRange(at, range))) {
+            latest.push({ ordemServicoId: row.id, reabertoEm: at });
         }
-
-        let snapshot: ResponsavelSnapshot[] = [];
-
-        try {
-            const parsed = JSON.parse(row.responsaveisJson || "[]") as Array<{
-                nome?: string;
-                cpf?: string;
-            }>;
-
-            snapshot = parsed
-                .map((entry) => ({ cpf: entry.cpf ?? "", nome: entry.nome ?? "" }))
-                .filter((entry) => entry.cpf || entry.nome);
-        } catch {
-            snapshot = [];
-        }
-
-        latest.set(row.ordemServicoId, { reabertoEm: at, responsaveis: snapshot });
     }
 
-    return [...latest.entries()]
-        .filter(([, entry]) => !range || inRange(entry.reabertoEm, range))
-        .map(([ordemServicoId, entry]) => ({
-            ordemServicoId,
-            reabertoEm: entry.reabertoEm,
-            responsaveis: entry.responsaveis
-        }));
+    return latest;
 }
 
 export async function osReabertasChart(db: AppDatabase, periodo: DashboardPeriodo) {
     const range = periodRange(periodo);
     const latest = await latestReaberturas(db, range);
-    const reabertaIds = new Set(
-        (
-            await db
-                .select({ id: ordensServico.id })
-                .from(ordensServico)
-                .where(eq(ordensServico.statusOsId, STATUS_OS.REABERTA))
-        ).map((row) => row.id)
-    );
     const counts = new Map<string, number>();
 
     for (const entry of latest) {
-        if (!reabertaIds.has(entry.ordemServicoId)) {
-            continue;
-        }
-
         const bucket = reaberturaBucket(entry.reabertoEm, periodo);
 
         counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
@@ -696,13 +657,8 @@ export async function listOsReabertas(
         return { items: [], total: 0, page, limit };
     }
 
-    const orders = await db
-        .select()
-        .from(ordensServico)
-        .where(eq(ordensServico.statusOsId, STATUS_OS.REABERTA));
-    const matched = orders
-        .filter((os) => ids.includes(os.id))
-        .sort((a, b) => b.id - a.id);
+    const orders = await db.select().from(ordensServico).where(inArray(ordensServico.id, ids));
+    const matched = orders.sort((a, b) => b.id - a.id);
     const total = matched.length;
     const slice = matched.slice((page - 1) * limit, page * limit);
 
@@ -718,31 +674,23 @@ export async function listOsReabertas(
     const veiculoById = new Map(
         veiculoRows.map((row) => [row.id, `${row.modelo} · ${row.placa}`])
     );
-    const respByOs = new Map(latest.map((entry) => [entry.ordemServicoId, entry.responsaveis]));
-    const cpfs = [
-        ...new Set(
-            slice.flatMap((os) => (respByOs.get(os.id) ?? []).map((entry) => entry.cpf))
-        )
-    ].filter(Boolean);
-    const usuarioRows =
-        cpfs.length > 0
-            ? await db
-                .select({ cpf: usuarios.cpf, nome: usuarios.nome })
-                .from(usuarios)
-                .where(inArray(usuarios.cpf, cpfs))
-            : [];
-    const nomeByCpf = new Map(usuarioRows.map((row) => [row.cpf, row.nome]));
+    const respRows = await db
+        .select({ ordemServicoId: responsaveis.ordemServicoId, nome: usuarios.nome })
+        .from(responsaveis)
+        .innerJoin(usuarios, eq(usuarios.cpf, responsaveis.usuarioCpf))
+        .where(inArray(responsaveis.ordemServicoId, slice.map((os) => os.id)));
+    const respByOs = new Map<number, string[]>();
+
+    for (const row of respRows) {
+        respByOs.set(row.ordemServicoId, [...(respByOs.get(row.ordemServicoId) ?? []), row.nome]);
+    }
 
     return {
         items: slice.map((os) => ({
             id: os.id,
             clienteNome: clienteByDoc.get(os.clienteDocumento) ?? os.clienteDocumento,
             veiculoLabel: veiculoById.get(os.veiculoId) ?? String(os.veiculoId),
-            responsaveis: (respByOs.get(os.id) ?? []).map((entry) => {
-                const snapshotNome = entry.nome && entry.nome !== entry.cpf ? entry.nome : "";
-
-                return nomeByCpf.get(entry.cpf) || snapshotNome || "Funcionário removido";
-            })
+            responsaveis: respByOs.get(os.id) ?? []
         })),
         total,
         page,

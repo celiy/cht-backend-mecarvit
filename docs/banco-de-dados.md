@@ -43,12 +43,11 @@ Definidas em `src/db/schema/tables.ts`. Toda tabela tem `mock` (booleano, para o
 | `responsavel` | `(usuario_cpf, ordem_servico_id)` | Funcionários responsáveis pela OS. |
 | `reg_entrada_saida` | `id` | Lançamento financeiro: nome, descrição, tipo (`entrada` ou `saida`), valor, prazo de pagamento. |
 | `pagamento` | `id` | Pagamentos de um lançamento: tipo e valor. |
-| `os_reabertura` | `id` | Histórico de reaberturas de OS, com os responsáveis no momento (JSON). |
 
 Relações que importam:
 
 - Uma OS **gera** um registro de entrada: `ordem_servico.reg_entrada_saida_id` aponta (único) para `reg_entrada_saida`. Ver [ordens de serviço](./entidades/ordens-de-servico.md).
-- Itens, responsáveis e reaberturas somem junto com a OS (`ON DELETE CASCADE`). Pagamentos somem junto com o lançamento.
+- Itens e responsáveis somem junto com a OS (`ON DELETE CASCADE`). Pagamentos somem junto com o lançamento.
 - Os status são constantes: `STATUS_OS` em `tables.ts` (1 aberta, 2 pendente, 3 em andamento, 4 concluída, 5 cancelada, 6 orçamento, 7 reaberta). São os mesmos ids de `OS_STATUS` no `cht-shared`.
 
 ## Migrações
@@ -62,6 +61,7 @@ Ficam em `src/db/migrations/` e são aplicadas pelo `drizzle-orm/migrator` sempr
 | `0002_…` | Acrescenta `data_limite_pagamento` à OS. |
 | `0003_item_servico_id` | Reestrutura `item_servico` (serviço por id, valores de peças e de obra). |
 | `0004_item_valor_orcamento` | `item_servico` passa a ter um único `valor`. |
-| `0005_os_reabertura` | Cria o status `reaberta` e a tabela `os_reabertura`. |
+| `0005_status_reaberta` | Cria o status `reaberta`. |
+| `0006_drop_os_reabertura` | Remove a tabela `os_reabertura`, que não é mais usada. |
 
 Para gerar uma nova migração depois de mudar o schema: `npm run db:generate`. Para aplicar sem subir a API: `npm run db:migrate`.

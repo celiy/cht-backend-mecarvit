@@ -41,7 +41,14 @@
       "idx": 5,
       "version": "6",
       "when": 1790000000000,
-      "tag": "0005_os_reabertura",
+      "tag": "0005_status_reaberta",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1790100000000,
+      "tag": "0006_drop_os_reabertura",
       "breakpoints": true
     }
   ]

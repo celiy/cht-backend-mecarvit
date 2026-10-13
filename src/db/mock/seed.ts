@@ -21,7 +21,6 @@ import {
     ordensServico,
     pagamentos,
     registrosEntradaSaida,
-    osReaberturas,
     responsaveis,
     servicos,
     STATUS_OS,
@@ -771,19 +770,6 @@ async function fillMockCompany(
                 mock: MOCK
             }))
         );
-
-        if (statusOsId === STATUS_OS.REABERTA) {
-            await db.insert(osReaberturas).values({
-                ordemServicoId: osId,
-                reabertoEm: modificadoEm,
-                responsaveisJson: JSON.stringify(
-                    chosenMechanics.map((cpf) => ({ cpf, nome: cpf }))
-                ),
-                criadoEm: modificadoEm,
-                modificadoEm,
-                mock: MOCK
-            });
-        }
     }
 
     for (let index = 0; index < MOCK_COUNTS.extraFinance; index += 1) {
