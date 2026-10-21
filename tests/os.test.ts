@@ -219,7 +219,12 @@ describe("ordem de serviço, financeiro e dashboard", () => {
         await request(app)
             .post("/api/regentradasaida")
             .set(bearer(ctx.token))
-            .send({ tipo: "saida", nome: "Compra de pecas", valor: 40 })
+            .send({
+                tipo: "saida",
+                nome: "Compra de pecas",
+                valor: 40,
+                pagamentos: [{ tipo: "dinheiro", valor: 40 }]
+            })
             .expect(201);
 
         const status = await request(app)
@@ -233,12 +238,12 @@ describe("ordem de serviço, financeiro e dashboard", () => {
         ).toBe(true);
 
         const fluxo = await request(app)
-            .get(`/api/dashboard/fluxo-mensal?ano=${new Date().getFullYear()}`)
+            .get("/api/dashboard/fluxo-pago?meses=12&tipo=saida")
             .set(bearer(ctx.token))
             .expect(200);
 
-        expect(fluxo.body.data.meses).toHaveLength(12);
-        const totalSaida = (fluxo.body.data.meses as Array<{ saida: number }>)
+        expect(fluxo.body.data.items).toHaveLength(12);
+        const totalSaida = (fluxo.body.data.items as Array<{ saida: number }>)
             .reduce((sum, item) => sum + item.saida, 0);
         expect(totalSaida).toBeGreaterThanOrEqual(40);
 

@@ -169,7 +169,7 @@ describe("regras de OS e pagamentos", () => {
             .send({
                 clienteDocumento: ctx.documento,
                 veiculoId: ctx.veiculoId,
-                dataLimitePagamento: "2026-09-30",
+                dataLimitePagamento: new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10),
                 itens: [{ servicoId: ctx.servicoId, quantidade: 1, valor: 80 }]
             })
             .expect(201);

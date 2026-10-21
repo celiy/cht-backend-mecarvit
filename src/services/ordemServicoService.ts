@@ -549,7 +549,11 @@ export async function updateOrdemServico(
     const nextVeiculo = dto.veiculoId ?? current.veiculoId;
     const cliente = await requireCliente(db, nextCliente);
 
-    await requireVeiculoDoCliente(db, nextVeiculo, cliente.documento);
+    // The OS keeps the customer of that service, so a vehicle later moved to
+    // another customer must not block edits that leave the pair unchanged.
+    if (nextCliente !== current.clienteDocumento || nextVeiculo !== current.veiculoId) {
+        await requireVeiculoDoCliente(db, nextVeiculo, cliente.documento);
+    }
 
     if (dto.statusOsId !== undefined && dto.statusOsId !== current.statusOsId) {
         const statusRows = await db.select().from(statusOs).where(eq(statusOs.id, dto.statusOsId)).limit(1);
